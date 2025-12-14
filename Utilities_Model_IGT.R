@@ -36,26 +36,35 @@ Load.Data <- function(my.file) {
 ## This function fits 
 VPP.Fit <- function(my.txt.file) {
 
-    fit.vpp <- return(igt_vpp(
+    cat("________________________\n")
+    cat("Starting VPP fit\n\n")
+
+    fit.vpp <- igt_vpp(
         data    = my.txt.file,
         niter   = 2000,
         nwarmup = 1000,
         nchain  = 4,
         ncore   = 4
-        ))
+        )
 
-    pdf(filename = "VPP_Fit_Plots.pdf")
+    pdf("VPP_Fit_Plots.pdf")
     
         plot(fit.vpp, type = "trace")
-    
-        ## All Rhat values should be less or equal than 1.1
-        rhat(fit.vpp)
-
         plot(fit.vpp)
 
     dev.off()
 
-    printFit(fit.vpp)
+    ## All Rhat values should be less or equal than 1.1
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    rhat(fit.vpp)
+    cat("\n________________________\n")
+
+    cat("All indices:\n")
+    cat(fit.vpp$allIndPars)
+    cat("\n________________________\n")
+
+    return(fit.vpp)
 
 }
 
@@ -63,15 +72,18 @@ VPP.Fit <- function(my.txt.file) {
 
 PVLdelta.Fit <- function(my.txt.file) {
 
-    fit.PVLdelta <- return(igt_pvl_delta(
+    cat("________________________\n")
+    cat("Starting PVL delta fit\n\n")
+
+    fit.PVLdelta <- igt_pvl_delta(
         data = my.txt.file,
         niter = 2000,
         nwarmup = 1000,
         nchain = 4,
         ncore = 4
-    ))
+    )
 
-    pdf(filename = "PVLdelta_Fit_Plot.pdf")
+    pdf("PVLdelta_Fit_Plot.pdf")
     
         plot(fit.PVLdelta, type = "trace")
         plot(fit.PVLdelta)
@@ -79,24 +91,33 @@ PVLdelta.Fit <- function(my.txt.file) {
     dev.off()
 
     ## All Rhat values should be less or equal than 1.1
-    rhat(fit.PVLdelta)
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    rhat(PVLdelta)
+    cat("\n________________________\n")
 
-    printFit(fit.PVLdelta)
+    cat("All indices:\n")
+    cat(PVLdelta$allIndPars)
+    cat("\n________________________\n")
+    return(fit.PVLdelta)
 }
 
 
 
 ORL.Fit <- function(my.txt.file) {
 
-    fit.ORL <- return(igt_orl(
+    cat("________________________\n")
+    cat("Starting ORL fit\n\n")
+
+    fit.ORL <- igt_orl(
         data    = my.txt.file,
         niter   = 2000,
         nwarmup = 1000,
         nchain  = 4,
         ncore   = 4
-))
+)
 
-    grDevices::pdf("ORL_Fit_Plots.pdf")
+    pdf("ORL_Fit_Plots.pdf")
     
         plot(fit.ORL, type = "trace")
         plot(fit.ORL)
@@ -104,19 +125,25 @@ ORL.Fit <- function(my.txt.file) {
     dev.off()
 
     ## All Rhat values should be less or equal than 1.1
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
     rhat(fit.ORL)
+    cat("\n________________________\n")
 
-    printFit(fit.ORL)
+    cat("All indices:\n")
+    cat(fit.ORL$allIndPars)
+    cat("\n________________________\n")
+
+    return(fit.ORL)
 }
 
 
 Fit.Models <- function(my.txt.file) {
     vpp.fit <- VPP.Fit(my.txt.file)
-    vpp.fit$fit
 
     pvl.fit <- PVLdelta.Fit(my.txt.file)
-    pvl.fit$fit
 
     orl.fit <- ORL.Fit(my.txt.file)
-    orl.fit$fit
+
+    printFit(c(vpp.fit, pvl.fit, orl.fit))
 }
