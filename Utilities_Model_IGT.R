@@ -49,7 +49,7 @@ VPP.Fit <- function(my.txt.file) {
 
     pdf("VPP_Fit_Plots.pdf")
     
-        plot(fit.vpp, type = "trace")
+        plot(fit.vpp, type = "trace", inc_warmup=T, fontSize=11)
         plot(fit.vpp)
 
     dev.off()
@@ -61,10 +61,10 @@ VPP.Fit <- function(my.txt.file) {
     cat("\n________________________\n")
 
     cat("All indices:\n")
-    cat(fit.vpp$allIndPars)
+    fit.vpp$allIndPars
     cat("\n________________________\n")
 
-    return(fit.vpp)
+    print(fit.vpp)
 
 }
 
@@ -85,7 +85,7 @@ PVLdelta.Fit <- function(my.txt.file) {
 
     pdf("PVLdelta_Fit_Plot.pdf")
     
-        plot(fit.PVLdelta, type = "trace")
+        plot(fit.PVLdelta, type = "trace", inc_warmup=T, fontSize=11)
         plot(fit.PVLdelta)
 
     dev.off()
@@ -97,12 +97,43 @@ PVLdelta.Fit <- function(my.txt.file) {
     cat("\n________________________\n")
 
     cat("All indices:\n")
-    cat(PVLdelta$allIndPars)
+    PVLdelta$allIndPars
     cat("\n________________________\n")
-    return(fit.PVLdelta)
+    print(fit.PVLdelta)
 }
 
+PVLdecay.Fit <- function(my.txt.file) {
+    cat("________________________\n")
+    cat("Starting PVL decay fit\n\n")
 
+    fit.PVLdecay <- igt_pvl_decay(
+        data = my.txt.file,
+        niter = 2000,
+        nwarmup = 1000,
+        nchain = 4,
+        ncore = 4
+    )
+
+    pdf("PVLdecay_Fit_Plot.pdf")
+    
+        plot(fit.PVLdecay, type = "trace", inc_warmup=T, fontSize=11)
+        plot(fit.PVLdecay)
+
+    dev.off()
+
+    dev.off()
+
+    ## All Rhat values should be less or equal than 1.1
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    rhat(PVLdecay)
+    cat("\n________________________\n")
+
+    cat("All indices:\n")
+    PVLdecay$allIndPars
+    cat("\n________________________\n")
+    print(fit.PVLdecay)
+}
 
 ORL.Fit <- function(my.txt.file) {
 
@@ -119,7 +150,7 @@ ORL.Fit <- function(my.txt.file) {
 
     pdf("ORL_Fit_Plots.pdf")
     
-        plot(fit.ORL, type = "trace")
+        plot(fit.ORL, type = "trace", inc_warmup=T, fontSize=11)
         plot(fit.ORL)
 
     dev.off()
@@ -131,10 +162,10 @@ ORL.Fit <- function(my.txt.file) {
     cat("\n________________________\n")
 
     cat("All indices:\n")
-    cat(fit.ORL$allIndPars)
+    fit.ORL$allIndPars
     cat("\n________________________\n")
 
-    return(fit.ORL)
+    print(fit.ORL)
 }
 
 
@@ -145,5 +176,23 @@ Fit.Models <- function(my.txt.file) {
 
     orl.fit <- ORL.Fit(my.txt.file)
 
-    printFit(c(vpp.fit, pvl.fit, orl.fit))
+    printFit(vpp.fit, pvl.fit, orl.fit, ic="both")
+    ## The lower LOOIC is, the better its model fit is
+
+    extract_ic(vpp.fit)
+    extract_ic(pvl.fit)
+    extract_ic(orl.fit)
+
+    ## We also want to remind you that there are multiple ways to compare 
+    ## computational models (e.g., simulation method (absolute model performance), 
+    ## parameter recovery, generalization criterion) and the goodness of fit 
+    ## (e.g., LOOIC or WAIC) is just one of them. Check if predictions from your model 
+    ## (e.g., “posterior predictive check”) can mimic the data (same data or new data) 
+    ## with reasonable accuracy. See Kruschke (2014) (for posterior predictive check), 
+    ## Guitart-Masip et al. (2012) (for goodness of fit and simulation performance on 
+    ## the orthogonalized Go/Nogo task), and Busemeyer & Wang (2000) (for generalization criterion) 
+    ## as well as Ahn et al. (2008; 2014) and Steingroever et al. (2014) (for the combination of 
+    ## multiple model comparison methods).
+
+
 }
