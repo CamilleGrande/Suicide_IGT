@@ -4,9 +4,12 @@
 # Description: 
 #       This script holds the functions to plot the group differences 
 
-library(rstan)
-library(reshape2)
 library(hBayesDM)
+library(rstan)
+library(bayestestR)
+library(ggplot2)
+library(reshape2)
+library(ggpubr)
 library(cowplot)
 
 source("Plotting_Utilities.R")
@@ -23,6 +26,7 @@ Load.Data.Fit <- function(group0, group1, group2) {
     group0_parVals <- group0$parVals
     group1_parVals <- group1$parVals
     group2_parVals <- group2$parVals
+
 }
 
 
@@ -189,35 +193,30 @@ ORL.Group.Differences <- function(group0, group1, group2) {
 
 HDI.Group.Differences <- function(group0, group1, group2) {
     
-    Load.Data.Fit(group0, group1, group2) 
+    fit.dataframe <- as.data.frame(Load.Data.Fit(group0, group1, group2))
 
-    h1 <- plotHDI(group0_parVals$mu_Arew - group1_parVals$mu_Arew) +
-        annotate("text", x = min(HDIofMCMC(fit.ORL.group0$parVals$mu_Arew - fit.ORL.group1$parVals$mu_Arew)), 
-        y = Inf, label = round(HDIofMCMC(group0_parVals$mu_Arew - group1_parVals$mu_Arew)[1]),4) +
-        theme_classic()
+    diff <- group0_parVals$mu_Arew - group1_parVals$mu_Arew
+    hdi  <- HDIofMCMC(diff)
+    hdi.annotation.low <- toString(round(hdi[1], 3))
+    hdi.annotation.up <- toString(round(hdi[2], 3))
+
+    # might remove plot title and rather put a title once all plots together
+    d1 <- ggplot(data = diff.df, aes(x = diff)) +
+        geom_density(data = diff.df, color = "#5e5e5eff", fill = "#8f8e8fff", alpha = 0.5) +
+        geom_segment(x = 0, xend = 0, y = 0, yend = Inf, size = 1.5, colour = "#c52982ff", linetype = 2) +
+        geom_segment(aes(x = hdi[1], y = 0, xend = hdi[2], yend = 0), size = 1.5, colour = "#c52982ff") +
+        annotate("text", x = I(0.1), y = I(0.8), label = hdi.annotation.low) + 
+        annotate("text", x = I(0.8), y = I(0.8), label = hdi.annotation.up) +        
+        ggtitle("Control - Depressed") + 
+        xlab("") +
+        ylab("") +
+        theme_classic(base_size = 20) +
+        theme(
+            plot.title = element_text(face = "bold", hjust = 0.5),
+            axis.text = element_text(color = "#6a6a6aff"),
+            axis.ticks = element_line(color = "#ffffffff"),
+            axis.line = element_line(color = "#ffffffff")
+            ) 
+
+        
 }
-
-
-
-
-
-diff <- group0_parVals$mu_Arew - group1_parVals$mu_Arew
-hdi  <- HDIofMCMC(diff)
-
-h1 <- ggplot(data = diff, aes(x = diff)) +
-    geom_density(color = "#f46aa3ff", fill = "#f671a8ff", alpha = 0.5) +
-    geom_vline(data = NULL, xintercept = 0, colour = "black", alpha = 0.5) +
-    geom_segment(aes(x = hdi[1], y = 0, xend = hdi[2], yend = 0), size = 1.5, colour = "#bf0050ff") +
-    theme_classic()
-
-
-# h1 <- ggplot(sample_df, aes(x = sample)) +
-#     geom_histogram(aes(y = ..density..), colour = "black", 
-#                    fill = "grey", bins = binSize, ...) +
-#     geom_segment(aes(x = HDI[1], y = 0, xend = HDI[2], yend = 0), size = 1.5, colour = "red") + 
-#     theme_minimal(base_size = 15) +
-#     scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
-#     scale_y_continuous(breaks = scales::pretty_breaks(n = 4)) +
-#     theme(axis.title.y = ggplot2::element_blank(),
-#           axis.title.x = ggplot2::element_blank(),
-#           plot.title = ggplot2::element_blank())
