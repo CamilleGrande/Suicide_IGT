@@ -5,49 +5,6 @@
 #       This script holds the utility functions necessary to run the Driver Script for the modelling of the IGT task
 
 
-fit.ORL <- function() {
-
-
-    fit.ORL.group0 <- igt_orl(        
-        data    = "igt_data_group0.txt",        
-        niter   = 10000,        
-        nwarmup = 2000,        
-        nchain  = 4,        
-        ncore   = 4        
-        )
-    
-    fit.ORL.group1 <- igt_orl(        
-        data    = "igt_data_group1.txt",        
-        niter   = 10000,        
-        nwarmup = 2000,        
-        nchain  = 4,        
-        ncore   = 4        
-        )
-
-    fit.ORL.group2 <- igt_orl(        
-        data    = "igt_data_group2.txt",        
-        niter   = 10000,        
-        nwarmup = 2000,        
-        nchain  = 4,        
-        ncore   = 4        
-        )
-
-    write.csv(fit.ORL.group0$allIndPars, "./Group0_allIndPars.csv")
-
-
-    df <- as.data.frame(fit.ORL.group0$fit)
-    str(df)    
-    write.csv(df, "./Group0_fit.csv")
-
-
-    write.csv(fit.ORL.group1$allIndPars, "./Group1_allIndPars.csv")
-    write.csv(fit.ORL.group1$fit, "./Group1_fit.csv")
-    write.csv(fit.ORL.group2$allIndPars, "./Group2_allIndPars.csv")
-    write.csv(fit.ORL.group2$fit, "./Group2_fit.csv")
-
-    return(c(fit.ORL.group0$allIndPars, fit.ORL.group0$fit, fit.ORL.group1$allIndPars, fit.ORL.group1$fit, fit.ORL.group2$allIndPars, fit.ORL.group2$fit,))
-}
-
 
 ## This function creates the tables for each group in our main file
 ## It is incorporated in the data loading function
@@ -116,4 +73,119 @@ Loading.Data <- function(file) {
 }
 
 
-  
+## This function fits a given model
+## The model has to be precised in the first argument
+##
+## Usage example: Models(igt_pvl_delta, "./data/all_groups.txt")
+Model.Fitting <- function(igt.model, my.txt.file) {
+
+    my.model <- igt.model(
+        data = my.txt.file,
+        niter = 1000,
+        nwarmup = 500,
+        nchain = 4,
+        ncore = 4
+    )
+
+    return(my.model)
+}
+
+my.rhat <- function(my.model) {
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    return(rhat(my.model))
+}
+
+
+My.Models <- function(my.txt.file) {
+
+    cat("________________________\n")
+    cat("Starting PVL delta fit\n\n")
+
+    fit.PVLdelta <- Model.Fitting(igt_pvl_delta, "./data/all_groups.txt")
+    
+    my.rhat(fit.PVLdelta)
+
+    cat("________________________\n")
+    cat("Starting PVL decay fit\n\n")
+
+    fit.PVLdecay <- igt_pvl_decay(
+        data = my.txt.file,
+        niter = 1000,
+        nwarmup = 500,
+        nchain = 4,
+        ncore = 4
+    )
+
+    cat("________________________\n")
+    cat("Starting ORL fit\n\n")
+
+    fit.ORL <- igt_orl(
+        data    = my.txt.file,
+        niter   = 1000,
+        nwarmup = 500,
+        nchain  = 4,
+        ncore   = 4
+    )
+
+
+
+}
+
+
+
+
+
+## PVLdelta.Fit("./data/all_groups.txt")
+PVLdelta.Fit <- function(my.txt.file) {
+
+    
+
+    trace.plot <- plot(fit.PVLdelta, type = "trace", inc_warmup=T, fontSize=11)
+    parameter.plot <- plot(fit.PVLdelta)
+    
+    all.plots <- ggarrange(trace.plot, parameter.plot, ncol=1, nrow=6)
+    ggsave(filename="./model_comparison/PVLdelta_Fit_Plots.pdf", plot = all.plots)
+
+    ## All Rhat values should be less or equal than 1.1
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    Rhat(fit.PVLdelta)
+    cat("\n________________________\n")
+
+    cat("All indices can be found in a .csv file\n")
+    write.csv(fit.PVLdelta$allIndPars, "./model_comparison/PVLdelta_allIndPars.csv")
+    cat("\n________________________\n")
+
+    return(fit.PVLdelta)
+}
+
+## PVLdecay.Fit("./data/all_groups.txt")
+PVLdecay.Fit <- function(my.txt.file) {
+    
+    pdf("./model_comparison/PVLdecay_Fit_Plots.pdf")
+        trace.plot <- plot(fit.PVLdecay, type = "trace", inc_warmup=T, fontSize=11)
+        parameter.plot <- plot(fit.PVLdecay)
+        multiplot(trace.plot, parameter.plot)
+    dev.off()
+
+
+     ## All Rhat values should be less or equal than 1.1
+    cat("\n________________________\n")
+    cat("Check Rhat values: should be less or equal to 1.1\n")
+    rhat(fit.PVLdecay)
+    cat("\n________________________\n")
+
+    cat("All indices can be found in a .csv file\n")
+    write.csv(fit.PVLdecay$allIndPars, "./model_comparison/PVLdecay_allIndPars.csv")
+    cat("\n________________________\n")
+}
+
+
+
+
+
+
+
+
+
