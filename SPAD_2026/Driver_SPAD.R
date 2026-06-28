@@ -53,10 +53,26 @@ if (is.numeric(iter_warmp) != T) {
 
 ###### Need to test those I can remove; + should I remove rstan and loo?
 ## Remove the hashtag for the packages you need to install :)
-#install.packages("dplyr", repos='https://cloud.r-project.org/')
-library(dplyr)
-#install.packages("hBayesDM", repos='https://cloud.r-project.org/')
+#install.packages("tidyverse", repos='https://cloud.r-project.org/')
+library(tidyverse)
+
+#install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
+#cmdstanr::install_cmdstan()
+
+#install.packages("loo", repos='https://cloud.r-project.org/')
+library(loo)
+
+#install.packages("rstanarm", repos='https://cloud.r-project.org/')
+library(rstanarm)
+
+#install.packages("bayesplot", repos='https://cloud.r-project.org/')
+#library(bayesplot)
+
+#if (!require(remotes)) install.packages("remotes")
+#remotes::install_github("CCS-Lab/hBayesDM", subdir = "R")
 library(hBayesDM)
+
+
 #install.packages("bayestestR", repos='https://cloud.r-project.org/')
 library(bayestestR)
 #install.packages("reshape2", repos='https://cloud.r-project.org/')
@@ -69,21 +85,20 @@ library(cowplot)
 library(gridExtra) #didnt
 #install.packages("ggh4x", repos='https://cloud.r-project.org/')
 library(ggh4x)
-#install.packages("loo", repos='https://cloud.r-project.org/')
-library(loo)
-library(posterior)
+
+#library(posterior)
 
 
 ## Modelling part
-source("Utilities_Model_IGT.R")
-source("Plotting_Utilities.R")
+source("./Utilities_Model_IGT.R")
+source("./Plotting_Utilities.R")
 
-Loading.Data(csv_file)
-Model.Comparison("./1-data/all_groups.txt", iter_warmp[1], iter_warmp[2]) ## 5000 and 2500
-Final.Model(iter_warmp[3], iter_warmp[4]) ## 10000 and 5000
+#Loading.Data(csv_file)
+#Model.Comparison("./1-data/all_groups.txt", iter_warmp[1], iter_warmp[2]) ## 5000 and 2500
+#Final.Model(iter_warmp[3], iter_warmp[4]) ## 10000 and 5000
 
-Plot.Groups("./4-final_model/ORL.HC_parVals.csv", "./4-final_model/ORL.PC_parVals.csv", "./4-final_model/ORL.SA_parVals.csv")
-Plot.HDI("./4-final_model/ORL.HC_parVals.csv", "./4-final_model/ORL.PC_parVals.csv", "./4-final_model/ORL.SA_parVals.csv")
+Plot.Groups("./4-final_model/ORL.HC_par_vals.csv", "./4-final_model/ORL.PC_par_vals.csv", "./4-final_model/ORL.SA_par_vals.csv")
+Plot.HDI("./4-final_model/ORL.HC_par_vals.csv", "./4-final_model/ORL.PC_par_vals.csv", "./4-final_model/ORL.SA_par_vals.csv")
 
 
 #install.packages("rstan")

@@ -5,7 +5,6 @@
 #       This script holds the utility functions necessary to run the Driver Script for the modelling of the IGT task
 
 
-
 ## This function creates the tables for each group in our main file
 ## It is incorporated in the data loading function
 Table.Per.Group <- function(my.data) {
@@ -74,6 +73,8 @@ Loading.Data <- function(file) {
 ## It is incorporated in Model fitting and Final fitting functions
 Model.Fitting <- function(igt.model, my.txt.file, my.iterations, my.warmups) {
 
+    set.seed(42) 
+
     ## Adapt number of iterations and warmup as needed in command line arguments
     my.model <- igt.model(
         data = my.txt.file,
@@ -91,7 +92,7 @@ Model.Fitting <- function(igt.model, my.txt.file, my.iterations, my.warmups) {
 my.rhat <- function(my.model, directory, model.name) {
     cat("\n________________________\n")
     cat("Check Rhat values: should be less or equal to 1.1\n")
-    write.csv(rhat(my.model), paste0(directory, model.name, ".csv"))
+    write.csv(rhat(my.model), paste0(directory, model.name, ".csv"), row.names = F)
     print(rhat(my.model))
 }
 
@@ -106,22 +107,22 @@ Fitting.Plots <- function(my.model, directory, model.name) {
 
 ## This function saves our model's group level indices in a .csv file
 ## It is incorporated in Model fitting and Final fitting functions
-## allIndPars: Summary of individual subjects’ parameters (default: mean). 
+## all_ind_pars: Summary of individual subjects’ parameters (default: mean). 
 ## Users can also choose to use median or mode (e.g., output1 = gng_m1("example", indPars="mode") ).
 Save.Indices <- function(my.model, directory, model.name) {
     cat("Indices per participant can be found in a .csv file in the 2-model_fitting directory\n")
-    write.csv(my.model$allIndPars, paste0(directory, model.name, "_allIndPars.csv"))
+    write.csv(my.model$all_ind_pars, paste0(directory, model.name, "_all_ind_pars.csv"), row.names = F)
     cat("\n\n________________________\n")
 }
 
 
 ## This function saves our model's individual fit indices in a .csv file
 ## It is incorporated in the Final fitting function
-## parVals: Posterior samples of all parameters. Extracted by rstan::extract(rstan_object, permuted=T). 
+## par_vals: Posterior samples of all parameters. Extracted by rstan::extract(rstan_object, permuted=T). 
 ## Note that hyper (group) mean parameters are indicated by mu_PARAMETER (e.g., mu_xi, mu_ep, mu_rho).
 Save.parVals <- function(my.model, directory, model.name) {
     cat("All parameter values per participant can be found in a .csv file in the 4-final_model directory\n")
-    write.csv(my.model$parVals, paste0(directory, model.name, "_parVals.csv"))
+    write.csv(my.model$par_vals, paste0(directory, model.name, "_par_vals.csv"), row.names = F)
     cat("\n\n________________________\n")
 }
 
@@ -167,23 +168,38 @@ Model.Comparison <- function(my.txt.file, my.iterations, my.warmups) {
     Save.RDS(fit.ORL, "./3-model_comparison/", "ORL")
 
     cat("\n\nModel comparison values (LOOIC and values)\nLower values indicate better model performance\n\n")
-    write.csv(printFit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"), "3-model_comparison/printFit_output.csv")
-    print(printFit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"))
-    return(printFit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"))
+    write.csv(print_fit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"), "3-model_comparison/printFit_output.csv", row.names = F)
+    print(print_fit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"))
+    return(print_fit(fit.PVLdelta, fit.PVLdecay, fit.ORL, ic="both"))
 }
 
-Comparison <- function() {
-    log_lik_1 <- extract_log_lik(fit.PVLdelta$fit)
-    loo_1 <- loo(log_lik_1)
-    log_lik_2 <- extract_log_lik(fit.PVLdecay$fit)
-    loo_2 <- loo(log_lik_2)
-    log_lik_3 <- extract_log_lik(fit.ORL$fit)
-    loo_3 <- loo(log_lik_3)
 
-    saveRDS(fit, file = "fit.rds")
-    fit <- readRDS("fit.rds")
+#Comparison <- function() {
+ #   log_lik_1 <- extract_log_lik(fit.PVLdelta$fit)
+  #  loo_1 <- loo(log_lik_1)
+   # log_lik_2 <- extract_log_lik(fit.PVLdecay$fit)
+    #loo_2 <- loo(log_lik_2)
+#    log_lik_3 <- extract_log_lik(fit.ORL$fit)
+ #   loo_3 <- loo(log_lik_3)
+#
+ #   saveRDS(fit, file = "fit.rds")
+  #  fit <- readRDS("fit.rds")
+#}
+
+
+Compute.loo <- function(model1, model2, model3) {
+
+    loo_delta <- fit.PVLdelta$fit$loo()
+loo_decay <- fit.PVLdecay$fit$loo()
+loo_orl   <- fit.ORL$fit$loo()
+
+print(loo_delta)
+plot(loo_delta)
+pareto_k_table(loo_delta)
+
+loo::loo_compare(loo_delta, loo_decay, loo_orl)
+
 }
-
 
 
 

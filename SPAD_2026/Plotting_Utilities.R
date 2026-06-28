@@ -183,7 +183,7 @@ Plot.HDI <- function(csv.HC, csv.PC, csv.SA) {
         all_data[[length(all_data) + 1]] <- df
 
         # HDI related
-        hdi <- HDIofMCMC(diff)
+        hdi <- hdi(diff)
 
         hdi_data[[length(hdi_data) + 1]] <- data.frame(
             Parameter = p,
