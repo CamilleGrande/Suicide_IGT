@@ -18,7 +18,7 @@ source("./Imputation/Utilities_Imputation.R")
 
 
 ## ---------- SPAD ----------
-#My.Imputation(SPAD, "SPAD_", "sis_total", "sis_total_imp", by.group = T, my.group = "SA", "group", "age", "sex")
+My.Imputation(SPAD, "SPAD_", "sis_total", "sis_total_imp", by.group = T, my.group = "SA", "group", "age", "sex")
 
 
 ## ---------- Jena ----------
