@@ -6,7 +6,7 @@
 
 
 # This function imputes the missing data
-My.Imputation <- function(data.rds, var, new.name, by.group = NULL, my.group = NULL, ...) {
+My.Imputation <- function(data.rds, dataset, var, new.name, by.group = NULL, my.group = NULL, ...) {
 
     data <- read_rds(data.rds)
 
@@ -16,7 +16,7 @@ My.Imputation <- function(data.rds, var, new.name, by.group = NULL, my.group = N
         var_and_predictors <- subset(var_and_predictors, group == my.group)
     } 
 
-    pdf(paste0("./Imputation/", var, "_Missing_pattern.pdf"))
+    pdf(paste0("./Imputation/Outputs/", dataset, var, "_Missing_pattern.pdf"))
         md.pattern(var_and_predictors)
     dev.off()
 
@@ -37,13 +37,13 @@ My.Imputation <- function(data.rds, var, new.name, by.group = NULL, my.group = N
     before <- summary(var_and_predictors)
     after <- summary(complete(tempData))
 
-    write.csv(before, paste0("./Imputation/", var, "_Summary_before.csv"), row.names = F)
-    write.csv(after, paste0("./Imputation/", var, "_Summary_after.csv"), row.names = F)
+    write.csv(before, paste0("./Imputation/Outputs/", dataset, var, "_Summary_before.csv"), row.names = F)
+    write.csv(after, paste0("./Imputation/Outputs/", dataset, var, "_Summary_after.csv"), row.names = F)
 
     # stripplot(tempData, .[[var]], pch = 19, xlab = "Imputation number")
     pdf(paste0("./Imputation/", var, "_Imputation_values.pdf"))
         print(stripplot(tempData, as.formula(paste0(var, " ~ .imp")), pch = 19, xlab = "Imputation number"))
     dev.off()
 
-    write_rds(tempData, paste0("./Imputation/", var, "_tempData.rds"))
+    write_rds(tempData, paste0("./Imputation/Outputs/", dataset, var, "_tempData.rds"))
 }

@@ -6,8 +6,8 @@
 
 
 ## Paths to .rds (change as needed)
-Jena = "./Imputation/Jena_Imputation.rds"
-SPAD = "./Imputation/SPAD_Imputation.rds"
+Jena = "./Imputation/Data/Jena_Imputation.rds"
+SPAD = "./Imputation/Data/SPAD_Imputation.rds"
 
 ## Libraries needed to run the script
 library(tidyverse)
@@ -18,8 +18,8 @@ source("./Imputation/Utilities_Imputation.R")
 
 
 ## ---------- SPAD ----------
-
+#My.Imputation(SPAD, "SPAD_", "sis_total", "sis_total_imp", by.group = T, my.group = "SA", "group", "age", "sex")
 
 
 ## ---------- Jena ----------
-My.Imputation(Jena, "sis_total", "sis_total_imp", by.group = T, my.group = "SA", "group", "age", "sex")
+My.Imputation(Jena, "Jena_", "sis_total", "sis_total_imp", by.group = T, my.group = "SA", "group", "age", "sex")
