@@ -54,3 +54,5 @@ My.Imputation(Jena, "Jena_", "sis_total", "sis_total_imp", by.group = T, my.grou
 ## ---------- Make new datasets for regression ----------
 Make.Imputed.Datasets(SPAD, "SPAD")
 Make.Imputed.Datasets(Jena, "Jena")
+
+Save.All.Datasets("SPAD", "JENA")

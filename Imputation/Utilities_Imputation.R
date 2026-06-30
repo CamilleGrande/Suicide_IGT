@@ -188,3 +188,33 @@ Make.Imputed.Datasets <- function(data, dataset) {
 
     Save.Imputed.Datasets(completed, dataset)
 }
+
+
+Make.All.Datasets <- function(dataset_spad, dataset_jena) {
+
+    all_sets <- vector("list", 5)
+
+    for (i in 1:5) {
+
+        spad <- readRDS(paste0("./Imputation/Outputs/SPAD_imp", i, ".rds"))
+        jena <- readRDS(paste0("./Imputation/Outputs/JENA_imp", i, ".rds"))
+
+        all_sets[[i]] <- bind_rows(spad, jena)
+    }
+
+    names(all_sets) <- paste0("all_imp", 1:5)
+    return(all_sets)
+}
+
+
+Save.All.Datasets <- function(dataset_spad, dataset_jena) {
+
+    all_sets <- Make.All.Datasets(dataset_spad, dataset_jena)
+
+    for (name in names(all_sets)) {
+        saveRDS(
+            all_sets[[name]],
+            file = paste0("./Imputation/Outputs/", name, ".rds")
+        )
+    }
+}
