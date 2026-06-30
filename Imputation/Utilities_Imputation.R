@@ -5,7 +5,7 @@
 ##      our SPAD and Jena data for the linear regression modelling step
 
 
-# This function imputes the missing data
+## This function imputes the missing data
 My.Imputation <- function(data.rds, dataset, var, new.name, by.group = NULL, my.group = NULL, ...) {
 
     ## Read our .rds prepared data
@@ -90,4 +90,101 @@ My.Imputation <- function(data.rds, dataset, var, new.name, by.group = NULL, my.
 
     ## save our final imputed data as rds to be used in regression models after
     write_rds(list_with_ids, paste0("./Imputation/Outputs/", dataset, var, "_tempData.rds"))
+}
+
+
+## This function cleans our imputed data lists
+Return.Cleaned.Lists <- function(data, dataset) {
+
+    ## Reads our original data
+    df <- read_rds(data)
+
+    ## List all .rds files of our datasdet (SPAD or Jena)
+    files <- list.files("./Imputation/Outputs/", pattern = paste0("^", dataset, ".*\\.rds$"), full.names = TRUE)
+
+    ## Reads all the .rds files we listed
+    imp_lists <- lapply(files, readRDS)
+
+    ## Get original filenames to clean future variable names
+    var_names <- basename(files)
+    ## 1. Remove SPAD_
+    var_names <- gsub("^SPAD_", "", var_names)
+    ## 2. Remove _tempData.rds
+    var_names <- gsub("_tempData\\.rds$", "", var_names)
+
+    ## Assigns our new cleaned names to our imputed values lists
+    names(imp_lists) <- var_names
+
+    ## Extract the imputed column (first column) and subj id for each iteration
+    clean_lists <- lapply(imp_lists, function(var_list) {
+
+        ## Extract the names of the imputed column (first column)
+        imputed_col <- names(var_list[[1]])[1]
+
+        ## Extract that column for each iteration + subj id
+        lapply(var_list, function(df) {
+            data.frame(
+                subj_id = df$subj_id,
+                value   = df[[imputed_col]]
+            )
+        })    
+    })
+
+    return(clean_lists)
+}
+
+
+## This function builds our newly imputed datasets
+Build.Imputed.Datasets <- function(df, clean_lists) {
+
+    completed <- vector("list", 5)
+
+    for (i in 1:5) {
+
+        temp <- df
+
+        for (v in names(clean_lists)) {
+
+            imp_df <- clean_lists[[v]][[i]]   # iteration i: df(subj_id, value)
+
+            # merge imputed values into temp by subj_id
+            temp <- merge(temp, imp_df, by = "subj_id", all.x = TRUE)
+
+            # replace missing values in the original variable
+            temp[[v]][is.na(temp[[v]])] <- temp$value[is.na(temp[[v]])]
+
+            # remove helper column
+            temp$value <- NULL
+        }
+
+        completed[[i]] <- temp
+    }
+
+    names(completed) <- paste0("imp", 1:5)
+    return(completed)
+}
+
+
+## This function saves a .rds file for each new dataset
+Save.Imputed.Datasets <- function(completed, dataset) {
+
+    for (name in names(completed)) {
+        saveRDS(
+            completed[[name]],
+            file = paste0("./Imputation/Outputs/", dataset, "_", name, ".rds")
+        )
+    }
+}
+
+
+## This functions wraps our previous functions for the pipeline to make the imputed datasets
+Make.Imputed.Datasets <- function(data, dataset) {
+
+    clean_lists <- Return.Cleaned.Lists(data, dataset)
+
+    df <- read_rds(data)
+
+    completed <- Build.Imputed.Datasets(df, clean_lists)
+
+    Save.Imputed.Datasets(completed, dataset)
 }
