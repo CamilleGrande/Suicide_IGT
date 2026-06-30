@@ -39,6 +39,10 @@ My.Imputation(SPAD, "SPAD_", "zscore_gonogo_total_omissions", "zscore_gonogo_tot
 My.Imputation(SPAD, "SPAD_", "zscore_gonogo_total_commissions", "zscore_gonogo_total_commissions_imp", 
     "group", "age", "sex", "mmse_total", "nart_corr", "ssi_total")
 
+## Go / No go – mean RT
+My.Imputation(SPAD, "SPAD_", "gonogo_mean_rt", "gonogo_mean_rt_imp", 
+    "group", "age", "sex", "mmse_total", "nart_corr", "ssi_total")
+
 
 ## ---------- Jena ----------
 
