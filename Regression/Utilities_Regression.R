@@ -128,6 +128,47 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
 }
 
 
+## This function computes Grubb's test for outliers
+## It quits our script if outliers are detected!
+Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
+
+    # might need library(outliers)
+    grubbs_results <- map_dfr(seq_along(models), function(i) {
+        
+        g <- grubbs.test(residuals(models[[i]]))
+
+        data.frame(
+            imputation  = paste0("imp", i),
+            statistic = round(unname(g$statistic["G"]), 3),
+            p_value     = round(g$p.value, 4),
+            conclusion  = ifelse(g$p.value < .05,
+                                "⚠ Outlier values detected",
+                                "✅ No outlier values detected"),
+            row.names   = NULL
+        )
+    })
+
+    ## Keep log of outlier status
+    outliers <- grubbs_results |>
+                    dplyr::filter(conclusion == "⚠ Outlier values detected")
+    
+    write.csv(outliers, "./Regression/Outputs/Grubbs_Outliers.csv", row.names = F)
+
+    if (nrow(outliers) > 0) {
+        cat("Grubb's test detected outliers; Inspect your data and re-run the script")
+        q()
+    } else {
+        cat("Grubb's test did not detect outliers; moving on to next test")
+    }
+}
+
+
+
+
+
+
+
+
 
 Regression <- function(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV) {
 
@@ -138,7 +179,9 @@ Regression <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
 
     my_models <- Fit.Models(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV)
 
-    imp_dfs_without_outliers <- Check.Outliers.Cook(my_models, imputed.datasets)
+    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets)
+
+    Check.Outliers.Grubb(imp_dfs_without_influent)
 
 
 }
