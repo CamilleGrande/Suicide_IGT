@@ -10,6 +10,8 @@
 ## and returns a list with all our models
 Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV) {
 
+    cat("\n=== MODEL FITTING ===\n")
+
     ## Create our formula with our dependent variable and all our inependent variable
     complete_formula <- as.formula(paste(DV, "~", paste(IV, collapse = " + ")))
 
@@ -44,6 +46,8 @@ Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
 ## Check the outliers using Cook's distance
 ## and returns updated imputed dfs without those observations
 Check.Outliers.Cook <- function(models, imputed.datasets) {
+
+    cat("\n=== COOK'S DISTANCE ===\n")
 
     ## Creates a list with all our cooks distance for each participant in each imputed dataset
     cook_list <- lapply(seq_along(models), function(i) {
@@ -124,6 +128,14 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
                                     dplyr::filter(!subj_id %in% influent_ids$subj_id)
     })
 
+    ## Save each filtered imputed dataset as an RDS file
+    lapply(seq_along(imp_df_without_infl_obs), function(i) {
+        write_rds(
+            imp_df_without_infl_obs[[i]],
+            paste0("./Regression/Outputs/imp_df_without_infl_obs_", i, ".rds")
+        )
+    })
+
     return(imp_df_without_infl_obs)
 }
 
@@ -131,6 +143,8 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
 ## This function computes Grubb's test for outliers
 ## It quits our script if outliers are detected!
 Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
+
+    cat("\n=== GRUBB ===\n")
 
     # might need library(outliers)
     grubbs_results <- map_dfr(seq_along(models), function(i) {
@@ -155,11 +169,74 @@ Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
     write.csv(outliers, "./Regression/Outputs/Grubbs_Outliers.csv", row.names = F)
 
     if (nrow(outliers) > 0) {
-        cat("Grubb's test detected outliers; Inspect your data and re-run the script")
+        cat("Grubb's test detected outliers; Inspect your data and re-run the script\n")
         q()
     } else {
-        cat("Grubb's test did not detect outliers; moving on to next test")
+        cat("Grubb's test did not detect outliers; moving on to next test\n")
     }
+}
+
+
+Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
+
+    cat("\n=== VIF ===\n")
+
+    vif_list <- lapply(seq_along(my_models_without_influent), function(i) {
+  
+        model   <- my_models_without_influent[[i]]
+        vif  <- vif(model)
+
+    })
+
+    vif_df <- as.data.frame(vif_list)
+
+    names(vif_df)[1] <- "VIF"
+    vif_df$Statut <- case_when(
+                            vif_df$VIF < 4  ~ "No - Little Multicollinearity",
+                            vif_df$VIF < 10 ~ "Moderate Multicollinearity",
+                            TRUE            ~ "High Multicollinearity"
+                        )
+
+    ## We need the row names here to have the variable names
+    write.csv(vif_df, "./Regression/Outputs/VIF_Multicollinearity.csv", row.names = T)
+
+    if (any(vif_df$Statut %in% c("Moderate Multicollinearity", "High Multicollinearity"))) {
+        cat("Variance Inflation Factor detected moderate / high multicollinearity; Inspect your data and re-run the script\n")
+        q()
+    } else {
+        cat("Variance Inflation Factor did not detect multicollinearity; moving on to next test\n")
+    }
+}
+
+
+Check.Residuals.Normality <- function(my_models_without_influent) {
+
+    cat("\n=== NORMALITY OF RESIDUALS (SHAPIRO WILK & QQ-PLOTS) ===\n")
+
+    shapiro_results <- map_dfr(seq_along(my_models_without_influent), function(i) {
+        
+        s <- shapiro.test(residuals(my_models_without_influent[[i]]))
+        data.frame(
+            imputation = paste0("imp", i),
+            W         = round(s$statistic, 4),
+            p_value   = round(s$p.value, 4),
+            conclusion = ifelse(s$p.value > .05, "Is normal", "Is NOT normal")
+        )
+    })
+
+    write.csv(shapiro_results, "./Regression/Outputs/Shapiro_Residuals_Normality.csv", row.names = F)
+
+    pdf("./Regression/Outputs/QQ_Plots_Residuals_Normality.pdf")
+        par(mfrow = c(2, 3))
+        for (i in 1:5) {
+            qqnorm(residuals(my_models_without_influent[[i]]), 
+                    main = paste("Q-Q plot - imp", i))
+            qqline(residuals(my_models_without_influent[[i]]), col = "red")
+        }
+        par(mfrow = c(1, 1))
+    dev.off()
+
+    cat("\nQQ-Plots can be found in Outputs folder; inspect them for further residual normality check\n\n")
 }
 
 
@@ -170,18 +247,36 @@ Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
 
 
 
-Regression <- function(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV) {
+
+
+
+
+Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV) {
 
     ## Keep our subject ids here for when need them
     subj_ids <- read_rds(imputed.datasets[1]) |>
                     dplyr::select(subj_id)
 
-
+    ## First, we fit the initial models for all imputations
     my_models <- Fit.Models(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV)
 
+    ## Then we check for outliers with Cook's distance
+    ## This function also removes the outliers to give us updated dfs without thos subjects, for each imputation
+    ## Subjects are excluded if they are outliers on at least 3 imputations
     imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets)
 
+    ## Here, we re-fit the models without the outliers 
+    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV)
+
+    ## Next, we check for outliers with Grubb's test
+    ## If it detects outliers, it will quit the environment and you should check the data
     Check.Outliers.Grubb(imp_dfs_without_influent)
 
+    ## We assess multicollinearity
+    ## If it detects outliers, it will quit the environment and you should check the data
+    Check.Variance.Inflation.Factor(my_models_without_influent)
 
+    ## Check that the residuals are normally distributed
+    ## using Shapiro Wilk's test and QQ-plot inspection
+    Check.Residuals.Normality(my_models_without_influent)
 }
