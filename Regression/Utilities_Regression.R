@@ -50,7 +50,7 @@ Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
 
 ## Check the outliers using Cook's distance
 ## and returns updated imputed dfs without those observations
-Check.Outliers.Cook <- function(models, imputed.datasets) {
+Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
 
     cat("\n=== COOK'S DISTANCE ===\n")
 
@@ -64,7 +64,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
         threshold <- 4 / length(cd)
     
         data.frame(
-            subj_id  = subj_ids$subj_id,
+            subj_id  = sub$subj_id,
             imp      = paste0("imp", i),
             cook     = as.numeric(cd),
             seuil    = threshold,
@@ -169,7 +169,7 @@ Check.Outliers.Grubb <- function(my_models_without_influent) {
 
     ## Keep log of outlier status
     outliers <- grubbs_results |>
-                    dplyr::filter(conclusion == "⚠ Outlier values detected")
+                    dplyr::filter(conclusion == "Outlier values detected")
     
     write.csv(outliers, "./Regression/Outputs/Check_Grubbs_Outliers.csv", row.names = F)
 
@@ -186,15 +186,56 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
 
     cat("\n=== VIF ===\n")
 
+    #vif_list <- lapply(seq_along(my_models_without_influent), function(i) {
+ # 
+  #      model   <- my_models_without_influent[[i]]
+   #     vif  <- vif(model)
+#
+ #   })
     vif_list <- lapply(seq_along(my_models_without_influent), function(i) {
-  
-        model   <- my_models_without_influent[[i]]
-        vif  <- vif(model)
-
+ 
+        model    <- my_models_without_influent[[i]]
+        vif_raw  <- vif(model)
+ 
+        ## car::vif() returns a plain named vector only when every term has 1 df.
+        ## As soon as one predictor is a factor with >2 levels (e.g. group, site),
+        ## it returns a GVIF matrix instead (Variable / GVIF / Df / GVIF^(1/(2*Df))).
+        ## We normalise both cases to a single named vector here.
+        if (is.matrix(vif_raw)) {
+            data.frame(
+                Variable = rownames(vif_raw),
+                ## squared, generalized VIF is the value comparable to a classic VIF
+                VIF      = vif_raw[, "GVIF^(1/(2*Df))"]^2,
+                row.names = NULL
+            )
+        } else {
+            data.frame(
+                Variable = names(vif_raw),
+                VIF      = as.numeric(vif_raw),
+                row.names = NULL
+            )
+        }
     })
 
-    vif_df <- as.data.frame(vif_list)
 
+    #vif_df <- do.call(rbind, lapply(seq_along(vif_list), function(i) {
+#
+ #       data.frame(
+  #          Model = paste0("Model_", i),
+   #         Variable = names(vif_list[[i]]),
+    #        VIF = vif_list[[i]]
+     #   )
+    #}))
+
+    vif_df <- do.call(rbind, lapply(seq_along(vif_list), function(i) {
+ 
+        data.frame(
+            Model    = paste0("Model_", i),
+            Variable = vif_list[[i]]$Variable,
+            VIF      = vif_list[[i]]$VIF
+        )
+    }))
+    
     names(vif_df)[1] <- "VIF"
     vif_df$Statut <- case_when(
                             vif_df$VIF < 4  ~ "No or Little Multicollinearity",
@@ -233,7 +274,7 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 
     pdf("./Regression/Outputs/QQ_Plots_Residuals_Normality.pdf")
         par(mfrow = c(2, 3))
-        for (i in 1:5) {
+        for (i in seq_along(my_models_without_influent)) {
             qqnorm(residuals(my_models_without_influent[[i]]), 
                     main = paste("Q-Q plot - imp", i))
             qqline(residuals(my_models_without_influent[[i]]), col = "red")
@@ -245,7 +286,7 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 }
 
 
-Check.Homoscedasticity.Breusch.Pagan <- function(my_models_without_influent) {
+Check.Homoscedasticity <- function(my_models_without_influent) {
 
     cat("\n=== HOMOSCEDASTICITY (BREUSCH PAGAN) ===\n")
 
@@ -297,7 +338,7 @@ Pooling.Models <- function(models) {
     models_mira <- as.mira(models)
 
     ## Pooling all 5 models
-    models_pooled <- pool(models)
+    models_pooled <- pool(models_mira)
 
     cat("\n── pooling R²...  ──\n")
         ## R2 pooled of our models (normal or robust depending on homoscedasticity status)
@@ -311,27 +352,26 @@ Pooling.Models <- function(models) {
 }
 
 
+Check.Residuals.Independence <- function(models) {
 
+    cat("\n=== INDEPENDENCE OF RESIDUALS (DURBIN-WATSON) ===\n")
 
+    dw_results <- map_dfr(seq_along(models), function(i) {
 
+        dw <- durbinWatsonTest(models[[i]])
 
+        data.frame(
+            imputation = paste0("imp", i),
+            DW        = round(dw$dw, 3),
+            p_value   = round(dw$p, 4),
+            conclusion = case_when(dw$dw >= 1.5 & dw$dw <= 2.5 ~ "No autocorrelation",
+                                    dw$dw < 1.5                  ~ "Positive Autocorrelation",
+                                    TRUE                         ~ "Negative Autocorrelation")
+            )
+    })
 
-
-p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
-        geom_point(size = 3) +
-        geom_errorbarh(aes(xmin = estimate - 1.96 * std.error,
-                        xmax = estimate + 1.96 * std.error),
-                    height = 0.2) +
-        geom_vline(xintercept = 0, linetype = "dashed") +
-        labs(
-            title = "Pooled Regression Coefficients (MI + Robust SE)",
-            x = "Estimate (with 95% CI)",
-            y = "Predictor"
-        ) +
-        theme_minimal()
-    ggsave("./Regression/Outputs/Forest_Plot.pdf", plot = p)
-
-
+    write.csv(dw_results, "./Regression/Outputs/Check_Residuals_Independence.csv")
+}
 
 
 Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV) {
@@ -340,15 +380,15 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
     subj_ids <- read_rds(imputed.datasets[1]) |> dplyr::select(subj_id)
 
     ## First, we fit the initial models for all imputations
-    my_models <- Fit.Models(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV)
+    my_models <- Fit.Models(imputed.datasets, dataset, group = group, DV, method, cook.threshold, IV)
 
     ## Then we check for outliers with Cook's distance
     ## This function also removes the outliers to give us updated dfs without thos subjects, for each imputation
     ## Subjects are excluded if they are outliers on at least 3 imputations
-    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets)
+    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids)
 
     ## Here, we re-fit the models without the outliers 
-    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV)
+    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, dataset, group = group, DV, method, cook.threshold, IV)
 
     ## Next, we check for outliers with Grubb's test
     ## If it detects outliers, it will quit the environment and you should check the data
@@ -364,9 +404,36 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
 
     ## Check Homoscedasticity with Breusch Pagan test
     ## If heteroscedasticity in 3 or more imputations, compute robust regression models
-    ## Will overwrite my_models either with normal models or robust models to pool them
-    my_models <- Check.Homoscedasticity.Breusch.Pagan(my_models_without_influent)
+    ## Will overwrite my_models_without_influent either with normal models or robust models to pool them
+    my_models_without_influent <- Check.Homoscedasticity(my_models_without_influent)
 
     ## Pools our models in one final model
-    models_pooled <- Pooling.models(my_models_without_influent)
+    models_pooled <- Pooling.Models(my_models_without_influent)
+
+    Check.Residuals.Independence(my_models_without_influent)
+
+    Plots(my_models_without_influent)
+
+    cat("\n\n===== All modelling and plots correctly ran! =====\n\n")
+}
+
+
+Plots <- function(models) {
+
+    pooled_summary <- summary(models)
+    
+    p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
+        geom_point(size = 3) +
+        geom_errorbarh(aes(xmin = estimate - 1.96 * std.error,
+                        xmax = estimate + 1.96 * std.error),
+                    height = 0.2) +
+        geom_vline(xintercept = 0, linetype = "dashed") +
+        labs(
+            title = "Pooled Regression Coefficients (MI + Robust SE)",
+            x = "Estimate (with 95% CI)",
+            y = "Predictor"
+        ) +
+        theme_minimal()
+
+    ggsave("./Regression/Outputs/Forest_Plot.pdf", plot = p)
 }
