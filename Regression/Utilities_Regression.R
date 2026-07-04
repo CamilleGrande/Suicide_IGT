@@ -21,10 +21,15 @@ Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
     models <- lapply(imputed.datasets, function(imp) {
 
         ## Reads imputed dataset
-        df <- read_rds(imp)
+        my.data <- readr::read_rds(imp)
+  
+        if (!is.null(group)) {
+            my.data <- dplyr::filter(my.data, group == !!group)
+        }
 
         ## Fits model for this dataset
-        complete_model <- lm(complete_formula, data = df)
+        complete_model <- lm(complete_formula, data = my.data)
+        complete_model$call$data <- my.data
 
         ## Adjusts model with our method if we specified one
         model <- if (method == "none") {
@@ -32,8 +37,8 @@ Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
                     } else {
                         step(complete_model, direction = method, trace = 0)
                     }
-        
-        cat("\nDataset:", dataset, "| N:", nrow(df), "| DV:", DV,
+
+        cat("\nDataset:", dataset, "| N:", nrow(my.data), "| DV:", DV,
         "\nFinal formula:", deparse(formula(model)), "\n")
 
         return(model)
@@ -90,7 +95,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
     ## Keep ids of influent observations for log purposes
     cook_synthesis |>
         filter(n_influent >= 3) |>
-            write.csv("./Regression/Outputs/Influent_Observations.csv", row.names = F)
+            write.csv("./Regression/Outputs/Check_Influent_Observations.csv", row.names = F)
 
 
     mean_threshold <- mean(4 / sapply(models, function(m) length(residuals(m))))
@@ -142,22 +147,22 @@ Check.Outliers.Cook <- function(models, imputed.datasets) {
 
 ## This function computes Grubb's test for outliers
 ## It quits our script if outliers are detected!
-Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
+Check.Outliers.Grubb <- function(my_models_without_influent) {
 
     cat("\n=== GRUBB ===\n")
 
     # might need library(outliers)
-    grubbs_results <- map_dfr(seq_along(models), function(i) {
+    grubbs_results <- map_dfr(seq_along(my_models_without_influent), function(i) {
         
-        g <- grubbs.test(residuals(models[[i]]))
+        g <- grubbs.test(residuals(my_models_without_influent[[i]]))
 
         data.frame(
             imputation  = paste0("imp", i),
             statistic = round(unname(g$statistic["G"]), 3),
             p_value     = round(g$p.value, 4),
             conclusion  = ifelse(g$p.value < .05,
-                                "⚠ Outlier values detected",
-                                "✅ No outlier values detected"),
+                                "Outlier values detected",
+                                "No outlier values detected"),
             row.names   = NULL
         )
     })
@@ -166,7 +171,7 @@ Check.Outliers.Grubb <- function(imp_dfs_without_influent) {
     outliers <- grubbs_results |>
                     dplyr::filter(conclusion == "⚠ Outlier values detected")
     
-    write.csv(outliers, "./Regression/Outputs/Grubbs_Outliers.csv", row.names = F)
+    write.csv(outliers, "./Regression/Outputs/Check_Grubbs_Outliers.csv", row.names = F)
 
     if (nrow(outliers) > 0) {
         cat("Grubb's test detected outliers; Inspect your data and re-run the script\n")
@@ -192,13 +197,13 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
 
     names(vif_df)[1] <- "VIF"
     vif_df$Statut <- case_when(
-                            vif_df$VIF < 4  ~ "No - Little Multicollinearity",
+                            vif_df$VIF < 4  ~ "No or Little Multicollinearity",
                             vif_df$VIF < 10 ~ "Moderate Multicollinearity",
                             TRUE            ~ "High Multicollinearity"
                         )
 
     ## We need the row names here to have the variable names
-    write.csv(vif_df, "./Regression/Outputs/VIF_Multicollinearity.csv", row.names = T)
+    write.csv(vif_df, "./Regression/Outputs/Check_VIF_Multicollinearity.csv", row.names = T)
 
     if (any(vif_df$Statut %in% c("Moderate Multicollinearity", "High Multicollinearity"))) {
         cat("Variance Inflation Factor detected moderate / high multicollinearity; Inspect your data and re-run the script\n")
@@ -224,7 +229,7 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
         )
     })
 
-    write.csv(shapiro_results, "./Regression/Outputs/Shapiro_Residuals_Normality.csv", row.names = F)
+    write.csv(shapiro_results, "./Regression/Outputs/Check_Shapiro_Residuals_Normality.csv", row.names = F)
 
     pdf("./Regression/Outputs/QQ_Plots_Residuals_Normality.pdf")
         par(mfrow = c(2, 3))
@@ -240,6 +245,70 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 }
 
 
+Check.Homoscedasticity.Breusch.Pagan <- function(my_models_without_influent) {
+
+    cat("\n=== HOMOSCEDASTICITY (BREUSCH PAGAN) ===\n")
+
+    bp_results <- map_dfr(seq_along(my_models_without_influent), function(i) {
+  
+        bp <- bptest(my_models_without_influent[[i]])
+
+        data.frame(
+            imputation = paste0("imp", i),
+            BP         = round(bp$statistic, 3),
+            df         = bp$parameter,
+            p_value    = round(bp$p.value, 4),
+            conclusion = ifelse(bp$p.value > .05, "Homoscedasticity OK", "Heteroscedasticity")
+        )
+    })
+
+    write.csv(bp_results, "./Regression/Outputs/Check_Homoscedasticity_Breusch_Pagan.csv")
+
+    ## Count nb of imputations with heteroscedasticity
+    n_hetero <- sum(bp_results$p_value < .05)
+
+    ## Our cut-off to say heteroscedasticity is present is 3 or more imputations (more than half) with heteroscedasticity
+    if (n_hetero >= 3) {
+        
+        cat("\nHeteroscedasticity in ", n_hetero, " of 5 imputations → moving on with robust error HC3\n\n")
+
+        ## Compute robust regression
+        robust_models <- lapply(my_models_without_influent, function(model) {
+            model$vcovHC3 <- vcovHC(model, type = "HC3")
+            model
+        })
+
+        return(robust_models)
+
+    } else {
+
+        cat("\nHomoscedasticity in ", 5 - n_hetero, "/5 imputations.\n")
+
+        return(my_models_without_influent)
+    }
+}
+
+
+Pooling.Models <- function(models) {
+
+    cat("\n=== POOLING MODELS ... ===\n")
+
+    ## as.mira to be able to pool them after
+    models_mira <- as.mira(models)
+
+    ## Pooling all 5 models
+    models_pooled <- pool(models)
+
+    cat("\n── pooling R²...  ──\n")
+        ## R2 pooled of our models (normal or robust depending on homoscedasticity status)
+        r2_pooled <- pool.r.squared(models_pooled)
+    print(r2_pooled) 
+
+    pooled_summary <- summary(models_pooled)
+    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary.csv")
+
+    return(models_pooled)
+}
 
 
 
@@ -247,6 +316,20 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 
 
 
+
+p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
+        geom_point(size = 3) +
+        geom_errorbarh(aes(xmin = estimate - 1.96 * std.error,
+                        xmax = estimate + 1.96 * std.error),
+                    height = 0.2) +
+        geom_vline(xintercept = 0, linetype = "dashed") +
+        labs(
+            title = "Pooled Regression Coefficients (MI + Robust SE)",
+            x = "Estimate (with 95% CI)",
+            y = "Predictor"
+        ) +
+        theme_minimal()
+    ggsave("./Regression/Outputs/Forest_Plot.pdf", plot = p)
 
 
 
@@ -254,8 +337,7 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV) {
 
     ## Keep our subject ids here for when need them
-    subj_ids <- read_rds(imputed.datasets[1]) |>
-                    dplyr::select(subj_id)
+    subj_ids <- read_rds(imputed.datasets[1]) |> dplyr::select(subj_id)
 
     ## First, we fit the initial models for all imputations
     my_models <- Fit.Models(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV)
@@ -270,7 +352,7 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
 
     ## Next, we check for outliers with Grubb's test
     ## If it detects outliers, it will quit the environment and you should check the data
-    Check.Outliers.Grubb(imp_dfs_without_influent)
+    Check.Outliers.Grubb(my_models_without_influent)
 
     ## We assess multicollinearity
     ## If it detects outliers, it will quit the environment and you should check the data
@@ -279,4 +361,12 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
     ## Check that the residuals are normally distributed
     ## using Shapiro Wilk's test and QQ-plot inspection
     Check.Residuals.Normality(my_models_without_influent)
+
+    ## Check Homoscedasticity with Breusch Pagan test
+    ## If heteroscedasticity in 3 or more imputations, compute robust regression models
+    ## Will overwrite my_models either with normal models or robust models to pool them
+    my_models <- Check.Homoscedasticity.Breusch.Pagan(my_models_without_influent)
+
+    ## Pools our models in one final model
+    models_pooled <- Pooling.models(my_models_without_influent)
 }
