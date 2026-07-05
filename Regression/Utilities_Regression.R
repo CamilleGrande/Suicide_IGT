@@ -6,6 +6,12 @@
 #       correlation/regression part of the SPAD study
 
 
+## Builds an output file path prefixed with the run's name (e.g. "All", "SUICIDE-DECIDE")
+## so that outputs from different Regression() calls don't overwrite each other
+Output.Path <- function(prefix, filename) {
+    file.path("./Regression/Outputs", paste0(prefix, "_", filename))
+}
+
 ## This function fits a given number of models (depending on imputed datasets given) with the specified parameters
 ## and returns a list with all our models
 Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
@@ -50,7 +56,7 @@ Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
 
 ## Check the outliers using Cook's distance
 ## and returns updated imputed dfs without those observations
-Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
+Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
 
     cat("\n=== COOK'S DISTANCE ===\n")
 
@@ -104,13 +110,13 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
     ## Keep ids of influent observations for log purposes
     cook_synthesis |>
         filter(n_influent >= majority) |>
-            write.csv("./Regression/Outputs/Check_Influent_Observations.csv", row.names = F)
+            write.csv(Output.Path(prefix, "Check_Influent_Observations.csv"), row.names = F)
 
 
     mean_threshold <- mean(4 / sapply(models, function(m) length(residuals(m))))
 
     ## Creates graph for supplementary materials
-    pdf("./Regression/Outputs/Cook_Graph.pdf")
+    pdf(Output.Path(prefix, "Cook_Graph.pdf"))
         cook_plot <- cook_synthesis |>
                         mutate(label = ifelse(n_influent >= 3, as.character(subj_id), "")) %>%
                             ggplot(aes(x = reorder(subj_id, mean_cook), 
@@ -145,8 +151,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
     lapply(seq_along(imp_df_without_infl_obs), function(i) {
         write_rds(
             imp_df_without_infl_obs[[i]],
-            paste0("./Regression/Outputs/imp_df_without_infl_obs_", i, ".rds")
-        )
+            Output.Path(prefix, paste0("imp_df_without_infl_obs_", i, ".rds")))
     })
 
     return(imp_df_without_infl_obs)
@@ -155,7 +160,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
 
 ## This function computes Grubb's test for outliers
 ## It quits our script if outliers are detected!
-Check.Outliers.Grubb <- function(my_models_without_influent) {
+Check.Outliers.Grubb <- function(my_models_without_influent, prefix) {
 
     cat("\n=== GRUBB ===\n")
 
@@ -179,7 +184,7 @@ Check.Outliers.Grubb <- function(my_models_without_influent) {
     outliers <- grubbs_results |>
                     dplyr::filter(conclusion == "Outlier values detected")
     
-    write.csv(outliers, "./Regression/Outputs/Check_Grubbs_Outliers.csv", row.names = F)
+    write.csv(outliers, Output.Path(prefix, "Check_Grubbs_Outliers.csv"), row.names = F)
 
     if (nrow(outliers) > 0) {
         cat("Grubb's test detected outliers; Inspect your data and re-run the script\n")
@@ -190,7 +195,7 @@ Check.Outliers.Grubb <- function(my_models_without_influent) {
 }
 
 
-Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
+Check.Variance.Inflation.Factor <- function(my_models_without_influent, prefix) {
 
     cat("\n=== VIF ===\n")
 
@@ -234,7 +239,7 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
                             TRUE            ~ "High Multicollinearity"
                         )
 
-    write.csv(vif_df, "./Regression/Outputs/Check_VIF_Multicollinearity.csv", row.names = F)
+    write.csv(vif_df, Output.Path(prefix, "Check_VIF_Multicollinearity.csv"), row.names = F)
 
     if (any(vif_df$Statut %in% c("Moderate Multicollinearity", "High Multicollinearity"))) {
         cat("Variance Inflation Factor detected moderate / high multicollinearity; Inspect your data and re-run the script\n")
@@ -245,7 +250,7 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
 }
 
 
-Check.Residuals.Normality <- function(my_models_without_influent) {
+Check.Residuals.Normality <- function(my_models_without_influent, prefix) {
 
     cat("\n=== NORMALITY OF RESIDUALS (SHAPIRO WILK & QQ-PLOTS) ===\n")
 
@@ -260,9 +265,9 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
         )
     })
 
-    write.csv(shapiro_results, "./Regression/Outputs/Check_Shapiro_Residuals_Normality.csv", row.names = F)
-
-    pdf("./Regression/Outputs/QQ_Plots_Residuals_Normality.pdf")
+    write.csv(shapiro_results, Output.Path(prefix, "Check_Shapiro_Residuals_Normality.csv"), row.names = F)
+ 
+    pdf(Output.Path(prefix, "QQ_Plots_Residuals_Normality.pdf"))
         par(mfrow = c(2, 3))
         for (i in seq_along(my_models_without_influent)) {
             qqnorm(residuals(my_models_without_influent[[i]]), 
@@ -276,7 +281,7 @@ Check.Residuals.Normality <- function(my_models_without_influent) {
 }
 
 
-Check.Homoscedasticity <- function(my_models_without_influent) {
+Check.Homoscedasticity <- function(my_models_without_influent, prefix) {
 
     cat("\n=== HOMOSCEDASTICITY (BREUSCH PAGAN) ===\n")
 
@@ -293,7 +298,7 @@ Check.Homoscedasticity <- function(my_models_without_influent) {
         )
     })
 
-    write.csv(bp_results, "./Regression/Outputs/Check_Homoscedasticity_Breusch_Pagan.csv")
+    write.csv(bp_results, Output.Path(prefix, "Check_Homoscedasticity_Breusch_Pagan.csv"))
 
     ## Number of imputations, and majority threshold (adapts to however many were provided)
     n.imp    <- length(my_models_without_influent)
@@ -324,7 +329,7 @@ Check.Homoscedasticity <- function(my_models_without_influent) {
 }
 
 
-Pooling.Models <- function(models) {
+Pooling.Models <- function(models, prefix) {
 
     cat("\n=== POOLING MODELS ... ===\n")
 
@@ -342,7 +347,7 @@ Pooling.Models <- function(models) {
     print(r2_pooled) 
 
     pooled_summary <- summary(models_pooled)
-    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary.csv")
+    write.csv(pooled_summary, Output.Path(prefix, "Pooled_Regression_Summary.csv"))
 
     return(pooled_summary)
 }
@@ -352,8 +357,8 @@ Pooling.Models <- function(models) {
 ## variance in place of the default OLS variance. mice::pool() has no option
 ## for a custom vcov, so we do the pooling by hand, term by term, using
 ## mice::pool.scalar() (the same thing pool() uses internally per coefficient).
-Pooling.Models.Robust <- function(models) {
- 
+Pooling.Models.Robust <- function(models, prefix) {
+
     cat("\n=== POOLING MODELS (ROBUST HC3 SE) ===\n")
  
     terms <- names(coef(models[[1]]))
@@ -386,13 +391,13 @@ Pooling.Models.Robust <- function(models) {
     cat("\n── pooled estimates (robust HC3) ──\n")
     print(pooled_summary)
  
-    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary_Robust.csv", row.names = FALSE)
- 
+    write.csv(pooled_summary, Output.Path(prefix, "Pooled_Regression_Summary_Robust.csv"), row.names = FALSE)
+
     return(pooled_summary)
 }
 
 
-Check.Residuals.Independence <- function(models) {
+Check.Residuals.Independence <- function(models, prefix) {
 
     cat("\n=== INDEPENDENCE OF RESIDUALS (DURBIN-WATSON) ===\n")
 
@@ -410,14 +415,20 @@ Check.Residuals.Independence <- function(models) {
             )
     })
 
-    write.csv(dw_results, "./Regression/Outputs/Check_Residuals_Independence.csv")
+     write.csv(dw_results, Output.Path(prefix, "Check_Residuals_Independence.csv"))
 }
-
-
-Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, group = NULL, DV, method, IV) {
+ 
+ 
+Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, prefix, group = NULL, DV, method, IV) {
 
     ## Keep our subject ids here for when need them
-    subj_ids <- read_rds(imputed.datasets[1]) |> dplyr::select(subj_id)
+    ## Must mirror the same group filter Fit.Models applies, otherwise subj_ids won't
+    ## line up row-for-row with the Cook's distances computed on the filtered data
+    subj_ids <- read_rds(imputed.datasets[1])
+    if (!is.null(group)) {
+        subj_ids <- dplyr::filter(subj_ids, group == !!group)
+    }
+    subj_ids <- dplyr::select(subj_ids, subj_id)
 
     ## site & cohort are only meaningful when pooling across the full "all" dataset;
     ## when running on a single dataset (e.g. "SPAD" or "SUICIDE-DECIDE"), they're constant
@@ -436,45 +447,45 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, g
     ## Then we check for outliers with Cook's distance
     ## This function also removes the outliers to give us updated dfs without thos subjects, for each imputation
     ## Subjects are excluded if they are outliers on at least 3 imputations
-    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids)
+    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids, prefix)
 
     ## Here, we re-fit the models without the outliers 
     my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, cohort, group = group, DV, method, IV)
 
     ## Next, we check for outliers with Grubb's test
     ## If it detects outliers, it will quit the environment and you should check the data
-    Check.Outliers.Grubb(my_models_without_influent)
+    Check.Outliers.Grubb(my_models_without_influent, prefix)
 
     ## We assess multicollinearity
     ## If it detects outliers, it will quit the environment and you should check the data
-    Check.Variance.Inflation.Factor(my_models_without_influent)
+    Check.Variance.Inflation.Factor(my_models_without_influent, prefix)
 
     ## Check that the residuals are normally distributed
     ## using Shapiro Wilk's test and QQ-plot inspection
-    Check.Residuals.Normality(my_models_without_influent)
+    Check.Residuals.Normality(my_models_without_influent, prefix)
 
     ## Check Homoscedasticity with Breusch Pagan test
     ## If heteroscedasticity in 3 or more imputations, compute robust regression models
-    homoscedasticity_check <- Check.Homoscedasticity(my_models_without_influent)
+    homoscedasticity_check <- Check.Homoscedasticity(my_models_without_influent, prefix)
     my_models_without_influent <- homoscedasticity_check$models
 
     ## Pools our models in one final model, using robust HC3 pooling if needed
     if (homoscedasticity_check$robust) {
-        pooled_summary <- Pooling.Models.Robust(my_models_without_influent)
+        pooled_summary <- Pooling.Models.Robust(my_models_without_influent, prefix)
     } else {
-        pooled_summary <- Pooling.Models(my_models_without_influent)
+        pooled_summary <- Pooling.Models(my_models_without_influent, prefix)
     }
 
-    Check.Residuals.Independence(my_models_without_influent)
-
-    Plots(pooled_summary)
+    Check.Residuals.Independence(my_models_without_influent, prefix)
+ 
+    Plots(pooled_summary, prefix)
 
     cat("\n\n===== All modelling and plots correctly ran! =====\n\n")
 }
 
 
-Plots <- function(pooled_summary) {
-    
+Plots <- function(pooled_summary, prefix) {
+        
     p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
         geom_point(size = 3) +
         geom_errorbarh(aes(xmin = estimate - 1.96 * std.error,
@@ -488,5 +499,5 @@ Plots <- function(pooled_summary) {
         ) +
         theme_minimal()
 
-    ggsave("./Regression/Outputs/Forest_Plot.pdf", plot = p)
+    ggsave(Output.Path(prefix, "Forest_Plot.pdf"), plot = p)
 }
