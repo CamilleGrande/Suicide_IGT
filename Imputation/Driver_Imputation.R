@@ -13,6 +13,10 @@ SPAD = "./Imputation/Data/SPAD_Imputation.rds"
 library(tidyverse)
 library(mice)
 
+## Wipe and recreate the Outputs folder so old files don't interfere with this run
+unlink("./Imputation/Outputs", recursive = TRUE)
+dir.create("./Imputation/Outputs", recursive = TRUE)
+
 ## Utility file with functions
 source("./Imputation/Utilities_Imputation.R")
 
