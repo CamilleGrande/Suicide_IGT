@@ -107,8 +107,9 @@ Return.Cleaned.Lists <- function(data, dataset) {
 
     ## Get original filenames to clean future variable names
     var_names <- basename(files)
-    ## 1. Remove SPAD_
-    var_names <- gsub("^SPAD_", "", var_names)
+    ## 1. Remove the dataset prefix (e.g. "SPAD_" or "Jena_") — matches whatever
+    ##    "dataset" was passed in, so this isn't hardcoded to one dataset
+    var_names <- gsub(paste0("^", dataset, "_"), "", var_names)
     ## 2. Remove _tempData.rds
     var_names <- gsub("_tempData\\.rds$", "", var_names)
 
