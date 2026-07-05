@@ -8,7 +8,7 @@
 
 ## This function fits a given number of models (depending on imputed datasets given) with the specified parameters
 ## and returns a list with all our models
-Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook.threshold, IV) {
+Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
 
     cat("\n=== MODEL FITTING ===\n")
 
@@ -38,7 +38,7 @@ Fit.Models <- function(imputed.datasets, dataset, group = NULL, DV, method, cook
                         step(complete_model, direction = method, trace = 0)
                     }
 
-        cat("\nDataset:", dataset, "| N:", nrow(my.data), "| DV:", DV,
+        cat("\nCohort:", cohort, "| N:", nrow(my.data), "| DV:", DV,
         "\nFinal formula:", deparse(formula(model)), "\n")
 
         return(model)
@@ -102,23 +102,24 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
 
     ## Creates graph for supplementary materials
     pdf("./Regression/Outputs/Cook_Graph.pdf")
-        cook_synthesis |>
-            mutate(label = ifelse(n_influent >= 3, as.character(subj_id), "")) %>%
-                ggplot(aes(x = reorder(subj_id, mean_cook), 
-                            y = mean_cook, 
-                            fill = Influent_in)) +
-                geom_col() +
-                geom_hline(yintercept = mean_threshold, linetype = "dashed", color = "red") +
-                scale_fill_manual(values = c(
-                    "All imputations"     = "#E63946",
-                    "Nearly all (≥3/5)"   = "#F4A261",
-                    "Some (1-2/5)"        = "#FFD166",
-                    "None"                = "#457B9D"
-                )) +
-                labs(title = "Mean Cook's distance (5 imputations)",
-                    x = "Participant", y = "Mean Cook", fill = "Influent in") +
-                theme_bw() +
-                theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+        cook_plot <- cook_synthesis |>
+                        mutate(label = ifelse(n_influent >= 3, as.character(subj_id), "")) %>%
+                            ggplot(aes(x = reorder(subj_id, mean_cook), 
+                                        y = mean_cook, 
+                                        fill = Influent_in)) +
+                            geom_col() +
+                            geom_hline(yintercept = mean_threshold, linetype = "dashed", color = "red") +
+                            scale_fill_manual(values = c(
+                                "All imputations"     = "#E63946",
+                                "Nearly all (≥3/5)"   = "#F4A261",
+                                "Some (1-2/5)"        = "#FFD166",
+                                "None"                = "#457B9D"
+                            )) +
+                            labs(title = "Mean Cook's distance (5 imputations)",
+                                x = "Participant", y = "Mean Cook", fill = "Influent in") +
+                            theme_bw() +
+                            theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+        print(cook_plot)
     dev.off()
 
     influent_ids <- subset(cook_synthesis, Influent_in == "All imputations" | Influent_in == "Nearly all (≥3/5)") |>
@@ -186,18 +187,12 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
 
     cat("\n=== VIF ===\n")
 
-    #vif_list <- lapply(seq_along(my_models_without_influent), function(i) {
- # 
-  #      model   <- my_models_without_influent[[i]]
-   #     vif  <- vif(model)
-#
- #   })
     vif_list <- lapply(seq_along(my_models_without_influent), function(i) {
  
         model    <- my_models_without_influent[[i]]
         vif_raw  <- vif(model)
  
-        ## car::vif() returns a plain named vector only when every term has 1 df.
+        ## car::vif() returns a plain named vector only when every term has 1 df
         ## As soon as one predictor is a factor with >2 levels (e.g. group, site),
         ## it returns a GVIF matrix instead (Variable / GVIF / Df / GVIF^(1/(2*Df))).
         ## We normalise both cases to a single named vector here.
@@ -217,16 +212,6 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
         }
     })
 
-
-    #vif_df <- do.call(rbind, lapply(seq_along(vif_list), function(i) {
-#
- #       data.frame(
-  #          Model = paste0("Model_", i),
-   #         Variable = names(vif_list[[i]]),
-    #        VIF = vif_list[[i]]
-     #   )
-    #}))
-
     vif_df <- do.call(rbind, lapply(seq_along(vif_list), function(i) {
  
         data.frame(
@@ -235,16 +220,14 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
             VIF      = vif_list[[i]]$VIF
         )
     }))
-    
-    names(vif_df)[1] <- "VIF"
+
     vif_df$Statut <- case_when(
                             vif_df$VIF < 4  ~ "No or Little Multicollinearity",
                             vif_df$VIF < 10 ~ "Moderate Multicollinearity",
                             TRUE            ~ "High Multicollinearity"
                         )
 
-    ## We need the row names here to have the variable names
-    write.csv(vif_df, "./Regression/Outputs/Check_VIF_Multicollinearity.csv", row.names = T)
+    write.csv(vif_df, "./Regression/Outputs/Check_VIF_Multicollinearity.csv", row.names = F)
 
     if (any(vif_df$Statut %in% c("Moderate Multicollinearity", "High Multicollinearity"))) {
         cat("Variance Inflation Factor detected moderate / high multicollinearity; Inspect your data and re-run the script\n")
@@ -318,14 +301,14 @@ Check.Homoscedasticity <- function(my_models_without_influent) {
             model$vcovHC3 <- vcovHC(model, type = "HC3")
             model
         })
-
-        return(robust_models)
-
+ 
+        return(list(models = robust_models, robust = TRUE))
+ 
     } else {
-
+ 
         cat("\nHomoscedasticity in ", 5 - n_hetero, "/5 imputations.\n")
-
-        return(my_models_without_influent)
+ 
+        return(list(models = my_models_without_influent, robust = FALSE))
     }
 }
 
@@ -338,17 +321,63 @@ Pooling.Models <- function(models) {
     models_mira <- as.mira(models)
 
     ## Pooling all 5 models
+    #     models_pooled <- pool(models)
+
     models_pooled <- pool(models_mira)
 
     cat("\n── pooling R²...  ──\n")
-        ## R2 pooled of our models (normal or robust depending on homoscedasticity status)
+        ## R2 pooled of our models
         r2_pooled <- pool.r.squared(models_pooled)
     print(r2_pooled) 
 
     pooled_summary <- summary(models_pooled)
     write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary.csv")
 
-    return(models_pooled)
+    return(pooled_summary)
+}
+
+
+## Pools models using Rubin's rules but substitutes each model's HC3 robust 
+## variance in place of the default OLS variance. mice::pool() has no option
+## for a custom vcov, so we do the pooling by hand, term by term, using
+## mice::pool.scalar() (the same thing pool() uses internally per coefficient).
+Pooling.Models.Robust <- function(models) {
+ 
+    cat("\n=== POOLING MODELS (ROBUST HC3 SE) ===\n")
+ 
+    terms <- names(coef(models[[1]]))
+    m     <- length(models)
+    n     <- nobs(models[[1]])
+ 
+    pooled_rows <- lapply(terms, function(term) {
+ 
+        Q <- vapply(models, function(mod) unname(coef(mod)[term]), numeric(1))
+ 
+        U <- vapply(models, function(mod) {
+            vc <- if (!is.null(mod$vcovHC3)) mod$vcovHC3 else vcov(mod)
+            vc[term, term]
+        }, numeric(1))
+ 
+        p <- mice::pool.scalar(Q, U, n = n, k = 1)
+ 
+        data.frame(
+            term      = term,
+            estimate  = p$qbar,
+            std.error = sqrt(p$t),
+            statistic = p$qbar / sqrt(p$t),
+            df        = p$df,
+            p.value   = 2 * pt(-abs(p$qbar / sqrt(p$t)), df = p$df)
+        )
+    })
+ 
+    pooled_summary <- bind_rows(pooled_rows)
+ 
+    cat("\n── pooled estimates (robust HC3) ──\n")
+    print(pooled_summary)
+ 
+    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary_Robust.csv", row.names = FALSE)
+ 
+    return(pooled_summary)
 }
 
 
@@ -374,13 +403,24 @@ Check.Residuals.Independence <- function(models) {
 }
 
 
-Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, group = NULL, DV, method, cook.threshold, IV) {
+Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, group = NULL, DV, method, IV) {
 
     ## Keep our subject ids here for when need them
     subj_ids <- read_rds(imputed.datasets[1]) |> dplyr::select(subj_id)
 
+    ## site & cohort are only meaningful when pooling across the full "all" dataset;
+    ## when running on a single dataset (e.g. "SPAD" or "SUICIDE-DECIDE"), they're constant
+    ## within that dataset and shouldn't be used as predictors.
+    ## This works regardless of whether the caller already included them in IV or not.
+    if (cohort == "all") {
+        IV <- union(IV, c("site", "cohort"))
+    } else {
+        IV <- setdiff(IV, c("site", "cohort"))
+    }
+    cat("\nIVs used for cohort '", cohort, "': ", paste(IV, collapse = ", "), "\n", sep = "")
+
     ## First, we fit the initial models for all imputations
-    my_models <- Fit.Models(imputed.datasets, dataset, group = group, DV, method, cook.threshold, IV)
+    my_models <- Fit.Models(imputed.datasets, cohort, group = group, DV, method, IV)
 
     ## Then we check for outliers with Cook's distance
     ## This function also removes the outliers to give us updated dfs without thos subjects, for each imputation
@@ -388,7 +428,7 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
     imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids)
 
     ## Here, we re-fit the models without the outliers 
-    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, dataset, group = group, DV, method, cook.threshold, IV)
+    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, cohort, group = group, DV, method, IV)
 
     ## Next, we check for outliers with Grubb's test
     ## If it detects outliers, it will quit the environment and you should check the data
@@ -404,23 +444,25 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, dataset, 
 
     ## Check Homoscedasticity with Breusch Pagan test
     ## If heteroscedasticity in 3 or more imputations, compute robust regression models
-    ## Will overwrite my_models_without_influent either with normal models or robust models to pool them
-    my_models_without_influent <- Check.Homoscedasticity(my_models_without_influent)
+    homoscedasticity_check <- Check.Homoscedasticity(my_models_without_influent)
+    my_models_without_influent <- homoscedasticity_check$models
 
-    ## Pools our models in one final model
-    models_pooled <- Pooling.Models(my_models_without_influent)
+    ## Pools our models in one final model, using robust HC3 pooling if needed
+    if (homoscedasticity_check$robust) {
+        pooled_summary <- Pooling.Models.Robust(my_models_without_influent)
+    } else {
+        pooled_summary <- Pooling.Models(my_models_without_influent)
+    }
 
     Check.Residuals.Independence(my_models_without_influent)
 
-    Plots(my_models_without_influent)
+    Plots(pooled_summary)
 
     cat("\n\n===== All modelling and plots correctly ran! =====\n\n")
 }
 
 
-Plots <- function(models) {
-
-    pooled_summary <- summary(models)
+Plots <- function(pooled_summary) {
     
     p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
         geom_point(size = 3) +
