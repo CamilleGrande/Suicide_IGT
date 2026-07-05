@@ -52,25 +52,16 @@ col_groupes <- c(
 )
 
 
-# Paths
-# Adapt them depending on number of imputation files you have
-imp1 = "./Imputation/Outputs/all_imp1.rds"
-imp2 = "./Imputation/Outputs/all_imp2.rds"
-imp3 = "./Imputation/Outputs/all_imp3.rds"
-imp4 = "./Imputation/Outputs/all_imp4.rds"
-imp5 = "./Imputation/Outputs/all_imp5.rds"
-
-Jena_imp1 = "./Imputation/Outputs/Jena_imp1.rds"
-Jena_imp2 = "./Imputation/Outputs/Jena_imp2.rds"
-Jena_imp3 = "./Imputation/Outputs/Jena_imp3.rds"
-Jena_imp4 = "./Imputation/Outputs/Jena_imp4.rds"
-Jena_imp5 = "./Imputation/Outputs/Jena_imp5.rds"
-
-no.outliers.imp1 = "./Regression/Outputs/imp_df_without_infl_obs_1.rds"
-no.outliers.imp2 = "./Regression/Outputs/imp_df_without_infl_obs_2.rds"
-no.outliers.imp3 = "./Regression/Outputs/imp_df_without_infl_obs_3.rds"
-no.outliers.imp4 = "./Regression/Outputs/imp_df_without_infl_obs_4.rds"
-no.outliers.imp5 = "./Regression/Outputs/imp_df_without_infl_obs_5.rds"
+## Set the number of imputations you have; the vectors below for the paths adapt automatically
+n.imp <- 5
+ 
+## Paths
+## If ran imputation script before, should not modify the name of the files as they are created through this other script; otherwise adapt the paths/names
+## If number of imputations is incorrect, will create path to files that don't exist (e.g. 5 imputations but creates path "imp6")
+## and script won't run!!
+imp             <- file.path("./Imputation/Outputs", sprintf("all_imp%d.rds", 1:n.imp))
+Jena_imp        <- file.path("./Imputation/Outputs", sprintf("Jena_imp%d.rds", 1:n.imp))
+no.outliers.imp <- file.path("./Regression/Outputs", sprintf("imp_df_without_infl_obs_%d.rds", 1:n.imp))
 
 
 ## Adapt arguments as needed
@@ -79,10 +70,13 @@ no.outliers.imp5 = "./Regression/Outputs/imp_df_without_infl_obs_5.rds"
 ##      group =
 ##      DV =
 ##      
-Regression(imputed.datasets = c(imp1, imp2, imp3, imp4, imp5), imputed.datasets.no.outliers = c(no.outliers.imp1, no.outliers.imp2, no.outliers.imp3, no.outliers.imp4, no.outliers.imp5),
-    cohort = "all", group = NULL, DV = "K", method = "backward", 
+
+## ------- All (SPAD + SUICIDE-DECIDE) -------
+Regression(imputed.datasets = imp, imputed.datasets.no.outliers = no.outliers.imp, cohort = "all", group = NULL, DV = "K", method = "backward", 
     IV = c("age", "sex", "group", "bdi_zscore", "zscore_gonogo_total_omissions", "zscore_gonogo_total_commissions", "flu_verb_p", "flu_verb_ani", "site", "cohort"))
 
-Regression(imputed.datasets = c(Jena_imp1, Jena_imp2, Jena_imp3, Jena_imp4, Jena_imp5), imputed.datasets.no.outliers = c(no.outliers.imp1, no.outliers.imp2, no.outliers.imp3, no.outliers.imp4, no.outliers.imp5),
-    cohort = "SUICIDE-DECIDE", group = "SA", DV = "K", method = "backward", 
+
+
+## ------- SUICIDE-DECIDE ONLY -------
+Regression(imputed.datasets = Jena_imp, imputed.datasets.no.outliers = no.outliers.imp, cohort = "SUICIDE-DECIDE", group = "SA", DV = "K", method = "backward", 
     IV = c("age", "sex", "group_lethality", "sis_total", "bdi_zscore", "zscore_gonogo_total_omissions", "zscore_gonogo_total_commissions", "flu_verb_p", "flu_verb_ani", "site", "cohort"))

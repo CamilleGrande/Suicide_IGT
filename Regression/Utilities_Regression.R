@@ -74,9 +74,18 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
 
     cook_df <- bind_rows(cook_list)
 
+    ## Number of imputations, and majority threshold (adapts to however many were provided)
+    n.imp     <- length(models)
+    majority  <- floor(n.imp / 2) + 1
+ 
+    label_all      <- "All imputations"
+    label_majority <- sprintf("Nearly all (\u2265%d/%d)", majority, n.imp)
+    label_some     <- sprintf("Some (1-%d/%d)", majority - 1, n.imp)
+    label_none     <- "None"
+
     ## Synthesizes which cook's distances are influent across all imputations
-    ## We will get rid of observations that are influent across 3 or more dataset (majority of datasets)
-    cook_synthesis <- cook_df |>
+    ## We will get rid of observations that are influent across a majority of datasets
+        cook_synthesis <- cook_df |>
                         group_by(subj_id) |>
                             summarise(
                                 n_influent    = sum(influent),
@@ -86,15 +95,15 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
                                 arrange(desc(n_influent), desc(max_cook)) |>
                                     mutate(
                                         Influent_in = case_when(
-                                        n_influent == 5 ~ "All imputations",
-                                        n_influent >= 3 ~ "Nearly all (≥3/5)",
-                                        n_influent >= 1 ~ "Some (1-2/5)",
-                                        TRUE            ~ "None" 
+                                        n_influent == 5 ~ label_all,
+                                        n_influent >= 3 ~ label_majority,
+                                        n_influent >= 1 ~ label_some,
+                                        TRUE            ~ label_none 
                                     ))
     
     ## Keep ids of influent observations for log purposes
     cook_synthesis |>
-        filter(n_influent >= 3) |>
+        filter(n_influent >= majority) |>
             write.csv("./Regression/Outputs/Check_Influent_Observations.csv", row.names = F)
 
 
@@ -109,20 +118,18 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
                                         fill = Influent_in)) +
                             geom_col() +
                             geom_hline(yintercept = mean_threshold, linetype = "dashed", color = "red") +
-                            scale_fill_manual(values = c(
-                                "All imputations"     = "#E63946",
-                                "Nearly all (≥3/5)"   = "#F4A261",
-                                "Some (1-2/5)"        = "#FFD166",
-                                "None"                = "#457B9D"
+                            scale_fill_manual(values = setNames(
+                                c("#E63946", "#F4A261", "#FFD166", "#457B9D"),
+                                c(label_all, label_majority, label_some, label_none)
                             )) +
-                            labs(title = "Mean Cook's distance (5 imputations)",
-                                x = "Participant", y = "Mean Cook", fill = "Influent in") +
+                            labs(title = sprintf("Mean Cook's distance (%d imputations)", n.imp),
+                                    x = "Participant", y = "Mean Cook", fill = "Influent in") +
                             theme_bw() +
                             theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
         print(cook_plot)
     dev.off()
 
-    influent_ids <- subset(cook_synthesis, Influent_in == "All imputations" | Influent_in == "Nearly all (≥3/5)") |>
+    influent_ids <- subset(cook_synthesis, Influent_in == label_all | Influent_in == label_majority) |>
                         dplyr::select(subj_id)
 
     imp_df_without_infl_obs <- lapply(imputed.datasets, function(imp) {
@@ -288,13 +295,17 @@ Check.Homoscedasticity <- function(my_models_without_influent) {
 
     write.csv(bp_results, "./Regression/Outputs/Check_Homoscedasticity_Breusch_Pagan.csv")
 
+    ## Number of imputations, and majority threshold (adapts to however many were provided)
+    n.imp    <- length(my_models_without_influent)
+    majority <- floor(n.imp / 2) + 1
+
     ## Count nb of imputations with heteroscedasticity
     n_hetero <- sum(bp_results$p_value < .05)
 
-    ## Our cut-off to say heteroscedasticity is present is 3 or more imputations (more than half) with heteroscedasticity
-    if (n_hetero >= 3) {
+     ## Our cut-off to say heteroscedasticity is present is a majority of imputations with heteroscedasticity
+    if (n_hetero >= majority) {
         
-        cat("\nHeteroscedasticity in ", n_hetero, " of 5 imputations → moving on with robust error HC3\n\n")
+        cat("\nHeteroscedasticity in ", n_hetero, " of", n.imp, "imputations → moving on with robust error HC3\n\n")
 
         ## Compute robust regression
         robust_models <- lapply(my_models_without_influent, function(model) {
@@ -306,8 +317,8 @@ Check.Homoscedasticity <- function(my_models_without_influent) {
  
     } else {
  
-        cat("\nHomoscedasticity in ", 5 - n_hetero, "/5 imputations.\n")
- 
+        cat("\nHomoscedasticity in ", n.imp - n_hetero, "/", n.imp, "imputations.\n")
+
         return(list(models = my_models_without_influent, robust = FALSE))
     }
 }
@@ -320,7 +331,7 @@ Pooling.Models <- function(models) {
     ## as.mira to be able to pool them after
     models_mira <- as.mira(models)
 
-    ## Pooling all 5 models
+    ## Pooling all models
     #     models_pooled <- pool(models)
 
     models_pooled <- pool(models_mira)
