@@ -6,10 +6,8 @@
 
 
 ## TO DO:
-##      commenter arguments
-##      Change all 5 and other hardcoded to nb imp / 2 etc
-##      France/Allemagne as site
-##      SPAD / Suicide_decide as study
+##      Plot visual check homoscedasticity
+##      Plot outliers visual check
 
 source("./Regression/Utilities_Regression.R")
 

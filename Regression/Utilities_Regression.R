@@ -53,7 +53,6 @@ Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
     return(models)
 }
 
-
 ## Check the outliers using Cook's distance
 ## and returns updated imputed dfs without those observations
 Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
@@ -397,6 +396,111 @@ Pooling.Models.Robust <- function(models, prefix) {
 }
 
 
+Check.Linearity <- function(my_models_without_influent, prefix) {
+
+    cat("\n=== LINEARITY (RAMSEY, MODEL SPECIFICATION) ===\n")
+
+    reset_results <- map_dfr(seq_along(my_models_without_influent), function(i) {
+
+        model     <- my_models_without_influent[[i]]
+        reset_raw <- resettest(model)
+
+        data.frame(
+            imputation = paste0("imp", i),
+            RESET      = round(unname(reset_raw$statistic), 3),
+            p_value    = round(reset_raw$p.value, 4),
+            conclusion = ifelse(reset_raw$p.value > .05,
+                                 "No misspecification detected",
+                                 "Possible misspecification")
+        )
+    })
+
+    write.csv(reset_results, Output.Path(prefix, "Check_RESET_Test.csv"), row.names = FALSE)
+
+    print(reset_results)
+
+
+    cat("\n=== LINEARITY (RESIDUALS VS FITTED) ===\n")
+
+    ## Plots the residuals against the fitted values and predictors
+    ## If most of the two lines overlap (reference line (mean = 0) and conditional mean); no evidence
+    ## that assumption of lienarity has been violated
+    pdf(Output.Path(prefix, "Linearity_Residuals_vs_Fitted.pdf"))
+        for (i in seq_along(my_models_without_influent)) {
+            
+            ## Plots residuals against fitted values
+            model <- my_models_without_influent[[i]]
+
+            plot_df <- data.frame(
+                ## fitted values
+                yhat = fitted(model),
+                ## residuals
+                res  = residuals(model)
+            )
+
+            p <- ggplot(plot_df, aes(yhat, res)) +
+                geom_point() +
+                geom_hline(yintercept = 0, color = "red") +
+                geom_smooth(se = FALSE, method = "loess", formula = y ~ x) +
+                labs(title = paste("Residuals vs Fitted - imp", i),
+                     x = "Fitted values", y = "Residuals") +
+                theme_minimal()
+
+            print(p)
+        
+
+            ## Split this model's predictors into continuous vs categorical
+            ## bc categorical need to be translated to numeric 
+            mf         <- model.frame(model)
+            predictors <- attr(terms(model), "term.labels")
+            is.num     <- sapply(mf[predictors], is.numeric)
+            num.preds  <- predictors[is.num]
+            cat.preds  <- predictors[!is.num]
+
+            ## Plots residuals vs predictors
+            ## One function for continuous and one for numeric 
+
+            ## Residuals vs each continuous predictor
+            for (pred in num.preds) {
+
+                pred_df <- data.frame(x = mf[[pred]], res = residuals(model))
+
+                p2 <- ggplot(pred_df, aes(x, res)) +
+                        geom_point() +
+                        geom_hline(yintercept = 0, color = "red") +
+                        geom_smooth(se = FALSE, method = "loess", formula = y ~ x) +
+                        labs(title = paste0("Residuals vs ", pred, " - imp", i),
+                            x = pred, y = "Residuals") +
+                        theme_minimal()
+                print(p2)
+            }
+
+            ## Residuals vs each categorical predictor
+            ## (as.numeric(as.factor(.)) so a conditional mean line can be drawn;
+            ## the underlying variable is still treated as categorical in the model itself)
+            for (pred in cat.preds) {
+
+                pred_df <- data.frame(x = as.numeric(as.factor(mf[[pred]])), res = residuals(model))
+
+                p3 <- ggplot(pred_df, aes(x, res)) +
+                    geom_point() +
+                    geom_hline(yintercept = 0, color = "red") +
+                    stat_summary(geom = "line", fun = mean, color = "blue", linewidth = 1.5) +
+                    labs(title = paste0("Residuals vs ", pred, " - imp", i),
+                         x = pred, y = "Residuals") +
+                    theme_minimal()
+                print(p3)
+            }
+        }
+    dev.off()
+
+
+
+    cat("\nLinearity plots (residuals vs fitted) can be found in Outputs folder; inspect them for non-linearity\n\n")
+
+}
+
+
 Check.Residuals.Independence <- function(models, prefix) {
 
     cat("\n=== INDEPENDENCE OF RESIDUALS (DURBIN-WATSON) ===\n")
@@ -475,6 +579,11 @@ Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, p
     } else {
         pooled_summary <- Pooling.Models(my_models_without_influent, prefix)
     }
+
+    ## Check linearity to detect specification errors in the model
+    ## Uses Ramsey Regression Equation Specification Error Test (RESET)
+    ## Significant p-value = relationship btw predictors and outcomes might not be linear
+    Check.Linearity(my_models_without_influent, prefix)
 
     Check.Residuals.Independence(my_models_without_influent, prefix)
  
