@@ -26,12 +26,12 @@ setwd(".")
 
 
 ## ---- SPAD ----
-Behavior.IGT(IGT.SPAD, my.group = "Group", "_SPAD")
+Behavior.IGT(IGT.SPAD, my.group = Group, "_SPAD")
 Plot.Choice.Prop.Block(IGT.SPAD, my.group = Group, group.labels = c("0" = "Healthy controls", "1" = "Patient controls", "2" = "Suicide attempters"), 
     "_SPAD", my.width = 15)
 
 
 ## ---- SUICIDE-DECIDE ----
-Behavior.IGT(IGT.Jena, my.group = "Group_by_suicide", "_Jena")
+Behavior.IGT(IGT.Jena, my.group = Group_by_suicide, "_Jena")
 Plot.Choice.Prop.Block(IGT.Jena, my.group = Group_by_suicide, group.labels = c("0" = "Healthy controls", "1" = "Patient controls", "NVSA" = "Non violent attempters", "VSA" = "Violent attempters"),
     "_Jena", my.width = 10)
