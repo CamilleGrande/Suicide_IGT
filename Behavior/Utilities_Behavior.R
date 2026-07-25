@@ -70,3 +70,73 @@ Behavior.IGT <- function(IGT.data, my.group, suffix) {
     
     write.csv(group_total_scores, paste0("./Behavior/Outputs/Group_level_total_scores", suffix, ".csv"), row.names = F)
 }
+
+
+## Computes the group differences on IGT variables using the Kruskal Wallis 
+## omnibus test and Dunn's test for post-hoc comparisons
+IGT.Differences <- function(my.data, iv, my.group, cohort) {
+
+    ## Look at plot to see distribution
+    my.plot <- ggboxplot(
+                    my.data, x = my.group, y = iv,
+                    color = my.group, palette = paletteer_d("nationalparkcolors::Badlands"),
+                    xlab = "Group", ylab = iv
+                )
+    
+    ggsave(paste0("./Behavior/Outputs/Boxplot_", iv, cohort, ".pdf"), plot = my.plot)
+
+    ## Must create formula first because cannot subset data
+    formula_kw <- as.formula(paste(iv, "~", my.group))
+
+    ## Kruskal-Wallis test (H statistic)
+    res_kw <- my.data |>
+                    kruskal_test(formula_kw)
+
+    ## Effect size Kruskal-Wallis results (eta-squared)
+    eff_size_kw <- my.data |>
+                        kruskal_effsize(formula_kw)
+
+    ## Dunn's test, adjusted with Holm
+    pairwise_comp_dunn <- my.data |>
+                            dunn_test(formula_kw, p.adjust.method = "holm")
+
+
+    my_results <- list(res_kw, eff_size_kw, pairwise_comp_dunn)
+    new_names <- c("KW_Result", "KW_Effect_Size", "Dunn_pairwise_comp")
+
+    my_results <- Map(function(tbl, nm) {
+                        dplyr::rename(tbl, !!nm := .y.)
+                    }, my_results, new_names)
+
+    my_results <- dplyr::bind_cols(my_results)
+
+    write_csv(my_results, paste0("./Behavior/Outputs/Results_", iv, cohort, ".csv"))
+}
+
+
+IGT.All.Differences <- function(data, vars, my.group, cohort) {
+
+    my.data <- read_csv(data)
+
+    lapply(vars, function(var) {
+        IGT.Differences(my.data, var, my.group, cohort)
+    })
+}
+
+
+## Net score difference per block
+IGT.Differences.Per.Block <- function(data, vars, my.group, cohort) {
+
+    my.data <- readr::read_csv(data)
+
+    blocks <- sort(unique(my.data[["block"]]))
+
+    lapply(blocks, function(b) {
+
+        ## subset data for block b
+        data_subset <- my.data[my.data[["block"]] == b, ]
+
+        ## run IGT differences on this subset of data
+        IGT.Differences(data_subset, vars, my.group, paste0(cohort, b))
+    })
+}
