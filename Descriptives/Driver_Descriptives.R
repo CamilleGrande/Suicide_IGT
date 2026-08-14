@@ -6,22 +6,16 @@
 #       descriptive stats part of the SPAD study
 
 
-## TO DO:
-##          Descriptives ptcp each group Jena / SPAD 
-##          Demographics
-##          Clinical 
-##          Cognition?
-##          IGT Behavioral scores
-##          Change path SPAD and SUICIDE DECIDE modelling so can run everything from root SPAD
-
-
 ## Libraries needed to run the script:
 library(tidyverse)
-library(ggplot2)
-library(paletteer)
-library(e1071)
-library(corrplot)
-library(RColorBrewer)
+library(parameters)
+library(rstatix)
+## if want to plot:
+#library(ggplot2)
+#library(paletteer)
+#library(e1071)
+#library(corrplot)
+#library(RColorBrewer)
 
 
 ## Contains the functions used in this script; will not run without
@@ -41,8 +35,9 @@ setwd(".")
     ## To compute descriptives for regression, use ./Imputation/Data csv
 
 
-All.Numeric(IGT.SPAD, Descriptives.SPAD, "./Descriptives/Outputs/", c("Age", "MMSE_Total", "NART_Corr", "SIS_Total", "BDI13_Total"), "_SPAD.pdf", "_SPAD.csv", group.var = "Group")
-All.Frequencies(IGT.SPAD, Descriptives.SPAD, "./Descriptives/Outputs/", c("Sex", "Group"), "_SPAD.pdf", "_SPAD.csv", group.var = "Group" )
+## ------- SPAD -------
+SPAD.Descriptives(IGT.SPAD, Descriptives.SPAD)
 
-All.Numeric(IGT.Jena, Descriptives.Jena, "./Descriptives/Outputs/", c("Age", "SIS_Total", "BDI2_sum"), "_Jena.pdf", "_Jena.csv", group.var = "Group")
-All.Frequencies(IGT.Jena, Descriptives.Jena, "./Descriptives/Outputs/", c("Sex", "Group", "GroupSA"), "_Jena.pdf", "_Jena.csv", group.var = "Group" )
+
+## ------- SUICIDE-DECIDE -------
+SUICIDEDECIDE.Descriptives(IGT.Jena, Descriptives.Jena)
