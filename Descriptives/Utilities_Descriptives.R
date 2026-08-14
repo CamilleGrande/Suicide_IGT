@@ -208,9 +208,13 @@ Chi.Square <- function(data.frequency, dataset = NULL) {
 
 
 ## Kruskal wallis and dunn test (pairwise comp)
-Kruskal.Wallis <- function(data.numeric) {
+Kruskal.Wallis <- function(data.numeric, dataset = NULL) {
 
-  my.data <- select(data.numeric, -any_of(c("ssi_total", "nb_actual_sa_py", "sis_total")))
+  if (dataset == "SPAD") {
+    my.data <- select(data.numeric, -any_of(c("ssi_total", "nb_actual_sa_py", "sis_total")))
+  } else if (dataset == "SUICIDEDECIDE") {
+    my.data <- select(data.numeric, -any_of(c("ssi_total")))
+  }
 
   my.tests <- bind_rows(lapply(setdiff(names(my.data), "group"), function(var) {
 
@@ -268,7 +272,7 @@ SPAD.Descriptives <- function(ids.IGT, data.SPAD) {
   write.csv(chi_sq, "./Descriptives/Outputs/ChiSquare_Descriptives_SPAD.csv", row.names = FALSE)
 
   ## Kruskal Wallis
-  kw <- Kruskal.Wallis(numeric_vars)
+  kw <- Kruskal.Wallis(numeric_vars, dataset = "SPAD")
   write.csv(kw, "./Descriptives/Outputs/KruskalWallis_Descriptives_SPAD.csv", row.names = FALSE)
 
 }
@@ -302,7 +306,7 @@ SUICIDEDECIDE.Descriptives <- function(ids.IGT, data.SUICIDEDECIDE) {
   write.csv(chi_sq, "./Descriptives/Outputs/ChiSquare_Descriptives_SUICIDEDECIDE.csv", row.names = FALSE)
 
   ## Kruskal Wallis
-  kw <- Kruskal.Wallis(numeric_vars)
+  kw <- Kruskal.Wallis(numeric_vars, dataset = "SUICIDEDECIDE")
   write.csv(kw, "./Descriptives/Outputs/KruskalWallis_Descriptives_SUICIDEDECIDE.csv", row.names = FALSE)
 
 }
