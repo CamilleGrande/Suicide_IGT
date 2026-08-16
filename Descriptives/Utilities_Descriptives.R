@@ -176,8 +176,7 @@ Chi.Square <- function(data.frequency, dataset = NULL) {
       prop <- pairwise.prop.test(
         x = table(frequency_vars_pw$group, frequency_vars_pw[[var]]),
         n = rowSums(table(frequency_vars_pw$group, frequency_vars_pw[[var]])),
-        p.adjust.method = "none",
-        correct = F
+        p.adjust.method = "none"
       )
 
       if (dataset == "SPAD") {
