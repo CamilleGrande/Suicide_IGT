@@ -6,17 +6,25 @@
 #       behavioral scores stats part of the SPAD study
 
 
-Behavior.IGT <- function(IGT.data, my.group, suffix) {
+## This function tidies the IGT data
+Tidy.IGT <- function(IGT.data, suffix) {
 
     ## Read csv and recode choices as A, B, C or D, and create column with safe/risky deck label
     igt <- read_delim(IGT.data, delim = ";") |>
                 mutate(choice = recode(choice, `1` = "A", `2` = "B", `3` = "C", `4` = "D")) |>
                     mutate(deck_type = ifelse(choice %in% c("C","D"), "safe", "risky"),
-                            block = ceiling(Trial / 20)) 
+                            block = ceiling(Trial / 20))
+
+    ## For SUICIDE-DECIDE, rename Group_by_suicide as Group
+    if ("Group_by_suicide" %in% names(igt)) {
+        igt <- igt |>
+                select(-Group) |>
+                    mutate(Group = as.factor(Group_by_suicide), .keep = "unused")
+    }
 
     ## Computes the block (Q1, Q2, Q3, Q4, Q5) for each participant
     subj_block_scores <- igt |>
-                            group_by(subjID, {{ my.group }}, block, choice) |>
+                            group_by(subjID, Group, block, choice) |>
                                 ## Computes number of times each subj choose deck A, B, C or D 
                                 ## for each block (Q1, Q2, Q3, Q4, Q5)
                                 summarise(n = n(), .groups = "drop") |>
@@ -27,12 +35,12 @@ Behavior.IGT <- function(IGT.data, my.group, suffix) {
                                         ## Creates new column with net score per block for each participant
                                         mutate(net_block = (C + D) - (A + B))
 
+    ## one csv file with all results (n choices for each deck and net score) for each block, for all subj
     write.csv(subj_block_scores, paste0("./Behavior/Outputs/Subject_level_block_scores", suffix, ".csv"), row.names = F)
-
 
     ## Computes the total score for each participant
     subj_total_scores <- igt |>
-                            group_by(subjID, {{ my.group }}, choice) |>
+                            group_by(subjID, Group, choice) |>
                                 ## Summarizes total nb of times subjects chose each deck
                                 ## 4 rows per subject (A, B, C, D)
                                 summarise(n = n(), .groups = "drop") |>
@@ -44,23 +52,19 @@ Behavior.IGT <- function(IGT.data, my.group, suffix) {
 
     write.csv(subj_total_scores, paste0("./Behavior/Outputs/Subject_level_total_scores", suffix, ".csv"), row.names = F)
 
+    return(list(subj_block_scores, subj_total_scores))
+}
 
-    ## Computes the block (Q1, Q2, Q3, Q4, Q5) for each group (from the participant data)
-    group_block_scores <- subj_block_scores |>
-                            group_by({{ my.group }}, block) |>
-                                summarise(
-                                    mean_net_block = mean(net_block, na.rm = TRUE),
-                                    sd_net_block   = sd(net_block,   na.rm = TRUE),
-                                    n_subj         = n(),
-                                    .groups = "drop"
-                                )
 
-    write.csv(group_block_scores, paste0("./Behavior/Outputs/Group_level_block_scores", suffix, ".csv"), row.names = F)
+## This function computes the descriptive stats (means) for each group
+Descriptives.IGT <- function(IGT.data, suffix) {
 
+    ## [1] is for per block (Q1-Q5) score analyses, [2] is for total score analysis
+    tidy <- Tidy.IGT(IGT.data, suffix)
 
     ## Computes the total score for each group (from the participant data)
-    group_total_scores <- subj_total_scores |>
-                            group_by({{ my.group }}) |>
+    group_total_scores <- as.data.frame(tidy[2]) |>
+                            group_by(Group) |>
                                 summarise(
                                     mean_net_total = mean(net_total, na.rm = TRUE),
                                     sd_net_total   = sd(net_total,   na.rm = TRUE),
@@ -68,75 +72,69 @@ Behavior.IGT <- function(IGT.data, my.group, suffix) {
                                     .groups = "drop"
                                 )
     
-    write.csv(group_total_scores, paste0("./Behavior/Outputs/Group_level_total_scores", suffix, ".csv"), row.names = F)
+    write.csv(group_total_scores, paste0("./Behavior/Outputs/Mean_total_score", suffix, ".csv"), row.names = F)
+
+
+    ## Computes the block (Q1, Q2, Q3, Q4, Q5) for each group (from the participant data)
+    group_block_scores <- as.data.frame(tidy[1]) |>
+                            group_by(Group, block) |>
+                                summarise(
+                                    mean_net_block = mean(net_block, na.rm = TRUE),
+                                    sd_net_block   = sd(net_block,   na.rm = TRUE),
+                                    n_subj         = n(),
+                                    .groups = "drop"
+                                )
+
+    write.csv(group_block_scores, paste0("./Behavior/Outputs/Mean_block_scores", suffix, ".csv"), row.names = F)
+
+    return(tidy)
 }
 
 
-## Computes the group differences on IGT variables using the Kruskal Wallis 
-## omnibus test and Dunn's test for post-hoc comparisons
-IGT.Differences <- function(my.data, iv, my.group, cohort) {
+## This function computes the group differences for the IGT behavioral scores
+## using p-adjusted values (holm)
+Group.Diff.IGT <- function(IGT.data, suffix) {
 
-    ## Look at plot to see distribution
-    my.plot <- ggboxplot(
-                    my.data, x = my.group, y = iv,
-                    color = my.group, palette = paletteer_d("nationalparkcolors::Badlands"),
-                    xlab = "Group", ylab = iv
-                )
-    
-    ggsave(paste0("./Behavior/Outputs/Boxplot_", iv, cohort, ".pdf"), plot = my.plot)
+    ## [1] is for per block (Q1-Q5) score analyses, [2] is for total score analysis
+    tidy <- Tidy.IGT(IGT.data, suffix)
 
-    ## Must create formula first because cannot subset data
-    formula_kw <- as.formula(paste(iv, "~", my.group))
+    ## total net score and total proportions per deck (A,B,C,D)
+    kw_total <- bind_rows(lapply(setdiff(names(as.data.frame(tidy[2])), c("subjID", "Group")), function(iv) {
 
-    ## Kruskal-Wallis test (H statistic)
-    res_kw <- my.data |>
-                    kruskal_test(formula_kw)
+        res_kw <- kruskal.test(as.formula(paste(iv, "~ Group")), data = as.data.frame(tidy[2]))
 
-    ## Effect size Kruskal-Wallis results (eta-squared)
-    eff_size_kw <- my.data |>
-                        kruskal_effsize(formula_kw)
+        tibble(
+            variable = res_kw$data.name,
+            statistic = res_kw$statistic,
+            df = res_kw$parameter,
+            p.value = res_kw$p.value,
+            p.adjusted = p.adjust(res_kw$p.value, method = "holm", n = 10)
+        )
+    }))
 
-    ## Dunn's test, adjusted with Holm
-    pairwise_comp_dunn <- my.data |>
-                            dunn_test(formula_kw, p.adjust.method = "holm")
+    ## now computing net score for each block (Q1-Q5)
+    net_score_per_block <- as.data.frame(tidy[1]) |>
+                            select(all_of(c("Group", "block", "net_block")))
 
+    kw_block <- bind_rows(lapply(1:5, function(b) {
+        
+        df_block <- net_score_per_block[net_score_per_block$block == b, ]
 
-    my_results <- list(res_kw, eff_size_kw, pairwise_comp_dunn)
-    new_names <- c("KW_Result", "KW_Effect_Size", "Dunn_pairwise_comp")
+        res_kw <- kruskal.test(net_block ~ Group, data = df_block)
 
-    my_results <- Map(function(tbl, nm) {
-                        dplyr::rename(tbl, !!nm := .y.)
-                    }, my_results, new_names)
+        tibble(
+            variable = paste0("block ", b, " by Group"),
+            statistic = res_kw$statistic,
+            df = res_kw$parameter,
+            p.value = res_kw$p.value,
+            p.adjusted = p.adjust(res_kw$p.value, method = "holm", n = 10)
+        )
+    }))
 
-    my_results <- dplyr::bind_cols(my_results)
+    ## Only one significant result (net score block 3 in SPAD)
+    significant <- net_score_per_block[net_score_per_block$block == "3", ]
+    posthoc <- dunn_test(net_block ~ Group, data = significant, p.adjust.method = "holm")
 
-    write_csv(my_results, paste0("./Behavior/Outputs/Results_", iv, cohort, ".csv"))
-}
-
-
-IGT.All.Differences <- function(data, vars, my.group, cohort) {
-
-    my.data <- read_csv(data)
-
-    lapply(vars, function(var) {
-        IGT.Differences(my.data, var, my.group, cohort)
-    })
-}
-
-
-## Net score difference per block
-IGT.Differences.Per.Block <- function(data, vars, my.group, cohort) {
-
-    my.data <- readr::read_csv(data)
-
-    blocks <- sort(unique(my.data[["block"]]))
-
-    lapply(blocks, function(b) {
-
-        ## subset data for block b
-        data_subset <- my.data[my.data[["block"]] == b, ]
-
-        ## run IGT differences on this subset of data
-        IGT.Differences(data_subset, vars, my.group, paste0(cohort, b))
-    })
+    summary <- bind_rows(kw_total, kw_block, posthoc)
+    write.csv(summary, paste0("./Behavior/Outputs/Group_differences", suffix, ".csv"), row.names = F)
 }
