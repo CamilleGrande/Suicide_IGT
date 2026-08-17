@@ -115,14 +115,14 @@ Numeric.Summary <- function(vars) {
                             summarise(across(everything(),
                                         list(
                                             n = ~ sum(!is.na(.x), na.rm = T),
-                                            mean = ~ mean(.x, na.rm = T),
-                                            sd = ~ sd(.x, na.rm = T),
-                                            median = ~ median(.x, na.rm = T),
-                                            iqr = ~ IQR(.x, na.rm = T),
-                                            min = ~ min(.x, na.rm = T),
-                                            max = ~ max(.x, na.rm = T),
-                                            skewness = ~ as.numeric(skewness(.x, na.rm = T)), 
-                                            kurtosis = ~ as.numeric(kurtosis(.x, na.rm = T))
+                                            mean = ~ round(mean(.x, na.rm = T), 3),
+                                            sd = ~ round(sd(.x, na.rm = T), 3),
+                                            median = ~ round(median(.x, na.rm = T), 3),
+                                            iqr = ~ round(IQR(.x, na.rm = T), 3),
+                                            min = ~ round(min(.x, na.rm = T), 3),
+                                            max = ~ round(max(.x, na.rm = T), 3),
+                                            skewness = ~ round(as.numeric(skewness(.x, na.rm = T)), 3), 
+                                            kurtosis = ~ round(as.numeric(kurtosis(.x, na.rm = T)), 3)
                                         ), .names = "{.col}.{.fn}"
                                     ), .groups = "drop") |>
                                             pivot_longer(cols = -group, names_to = c("variable", ".value"), names_sep = "\\.")
@@ -142,10 +142,10 @@ Frequency.Summary <- function(vars) {
                                     filter(!is.na(level)) |>
                                         count(group, variable, level, total_n, valid_n, name = "n") |>
                                             group_by(group, variable) |>
-                                                mutate(pct_valid = n / valid_n * 100,
-                                                        pct_total = n / total_n * 100,
-                                                        pct_valid_cum = cumsum(pct_valid),
-                                                        pct_total_cum = cumsum(pct_total)) |>
+                                                mutate(pct_valid = round((n / valid_n * 100), 3),
+                                                        pct_total = round((n / total_n * 100), 3),
+                                                        pct_valid_cum = round(cumsum(pct_valid), 3),
+                                                        pct_total_cum = round(cumsum(pct_total), 3)) |>
                                                     ungroup()
   
   return(frequency_summary)
