@@ -77,10 +77,24 @@ Plot.IGT <- function(IGT.data, suffix, my.width) {
                                             Group == "VSA" ~ "vSA"
                                             ))
 
+    group_levels <- if (any(net_score$Group %in% c("nvSA", "vSA"))) {
+                        c("HC", "PC", "nvSA", "vSA")
+                    } else {
+                        c("HC", "PC", "SA")
+                    }
+
     boxplot <- ggboxplot(
                     net_score, x = "Group", y = "net_total",
                     fill = "Group", palette = c("#719F47FF", "#F2CB05FF", "#DD75D3FF", "#E16305FF"),
-                    xlab = "Group", ylab = "Total net score"
+                    alpha = 0.8,
+                    xlab = "Group", ylab = "Total net score",
+                    order = group_levels
+                ) +
+                theme(
+                    axis.title = element_text(size = 16),
+                    axis.text  = element_text(size = 14),
+                    legend.title = element_text(size = 16),
+                    legend.text  = element_text(size = 14)
                 )
     
     ggsave(paste0("./Behavior/Outputs/Plot_Total_net_score", suffix, ".pdf"), plot = boxplot)
