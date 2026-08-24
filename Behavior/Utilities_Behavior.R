@@ -52,6 +52,21 @@ Tidy.IGT <- function(IGT.data, suffix) {
 
     write.csv(subj_total_scores, paste0("./Behavior/Outputs/Subject_level_total_scores", suffix, ".csv"), row.names = F)
 
+    prop_per_group <- subj_total_scores |>
+                            group_by(Group) |> 
+                                summarise(
+                                    mean_A = mean(A), 
+                                    SD_A = sd(A),
+                                    mean_B = mean(B), 
+                                    SD_B = sd(B),
+                                    mean_C = mean(C), 
+                                    SD_C = sd(C),
+                                    mean_D = mean(D),
+                                    SD_D = sd(D))
+
+    write.csv(prop_per_group, paste0("./Behavior/Outputs/Choice_prop_per_group", suffix, ".csv"), row.names = F)
+
+
     return(list(subj_block_scores, subj_total_scores))
 }
 
@@ -105,10 +120,10 @@ Group.Diff.IGT <- function(IGT.data, suffix) {
 
         tibble(
             variable = res_kw$data.name,
-            statistic = res_kw$statistic,
+            statistic = round(res_kw$statistic, 3),
             df = res_kw$parameter,
-            p.value = res_kw$p.value,
-            p.adjusted = p.adjust(res_kw$p.value, method = "holm", n = 10)
+            p.value = round(res_kw$p.value, 3),
+            p.adjusted = round(p.adjust(res_kw$p.value, method = "holm", n = 10), 3)
         )
     }))
 
@@ -124,10 +139,10 @@ Group.Diff.IGT <- function(IGT.data, suffix) {
 
         tibble(
             variable = paste0("block ", b, " by Group"),
-            statistic = res_kw$statistic,
+            statistic = round(res_kw$statistic, 3),
             df = res_kw$parameter,
-            p.value = res_kw$p.value,
-            p.adjusted = p.adjust(res_kw$p.value, method = "holm", n = 10)
+            p.value = round(res_kw$p.value, 3),
+            p.adjusted = round(p.adjust(res_kw$p.value, method = "holm", n = 10), 3)
         )
     }))
 
