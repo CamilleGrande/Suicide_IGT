@@ -5,217 +5,144 @@
 ##      our SPAD and Jena data for the linear regression modelling step
 
 
-## This function imputes the missing data
-My.Imputation <- function(data.rds, dataset, var, new.name, by.group = NULL, my.group = NULL, ...) {
-
-    ## Read our .rds prepared data
-    data <- read_rds(data.rds)
+## This function imputes the data for a variable
+Imputation <- function(data, var) {
 
     ## Keep only vars we will use to impute values var
-    var_and_predictors <- select(data, all_of(c("subj_id", var, ...)))
+    var_and_predictors <- select(data, all_of(c("subj_id", var, 
+                                ## predictors:
+                                "group", "age", "sex", "mmse_total", "nart_corr", "ssi_total")))
 
-    ## We will impute values inside a group as we are working with clinical data
-    ## this will keep only our group data if we specifiy by.group = T
-    if (isTRUE(by.group)) {
-        var_and_predictors <- subset(var_and_predictors, group == my.group)
-    } 
-
-    ## Save as .pdf the pattern of missing data among our group on our var of interest
-    pdf(paste0("./Imputation/Outputs/", dataset, var, "_Missing_pattern.pdf"))
-        md.pattern(var_and_predictors)
-    dev.off()
-
-    ## Check is values are NA -> if not, there is a problem and should check data before running the rest of the script
-    ids <- subset(var_and_predictors, is.na(var_and_predictors[[var]]))
-
-    if (all(is.na(ids[[var]]))) {
-        cat("All values are correctly NA \n")
-    } else {
-        cat("Not all values are NA, double check before running imputation")
-    }
-
-    ## Separate subj id and predictor var for mice; will re-attach after
-    subj_ids <- var_and_predictors$subj_id
-    model_data <- select(var_and_predictors, -all_of("subj_id")) |> as.data.frame()
+    model_data <- select(var_and_predictors, -all_of("subj_id")) |> 
+                    as.data.frame()
 
     ## Imputes our missing data
     tempData <- mice(model_data, m = 5, maxit = 50, meth = "pmm", seed = 42, print = F)
 
-    ## Summary of our data before imputation
-    before <- summary(var_and_predictors)
+    return(tempData)
+}
 
 
-    ## Building the summary after imputation
-    ## summary(complete(tempData)) gives us the summary for the first iteration only
-    ## As we will work with all iteration values then average, we want the average summary
+## This function averages the 5 imputed dataset for the imputed variable
+## and returns a summary of the old an new descriptives post imputation
+Summary.Before.After <- function(data, to_impute, all_imputed) {
 
-    ## First, get list of all data across all iteration (not summaries, actual data for each ptcp)
-    imp_lists <- lapply(1:tempData$m, function(i) {
-                        df <- complete(tempData, i)
-                        as.numeric(df[[var]])
-                    })
+    summary_before <- data |>
+                        select(all_of(names(to_impute))) |>
+                            summarise(across(everything(), list(
+                                n = ~sum(!is.na(.)),
+                                n_missing = ~sum(is.na(.)),
+                                mean = ~round(mean(., na.rm = TRUE), 3),
+                                sd = ~round(sd(., na.rm = TRUE), 3),
+                                median = ~round(median(., na.rm = TRUE), 3),
+                                iqr = ~round(IQR(., na.rm = TRUE), 3),
+                                min = ~round(min(., na.rm = TRUE), 3),
+                                max = ~round(max(., na.rm = TRUE), 3)),
+                                .names = "{.col}__{.fn}")) |>
+                                    pivot_longer(everything(), names_to = c("variable", ".value"), names_sep = "__")
 
-    ## create a summary for each of the lists
-    imp_summaries <- lapply(imp_lists, function(x) {
-                            c(
-                                Min    = min(x, na.rm = TRUE),
-                                Q1     = quantile(x, 0.25, na.rm = TRUE),
-                                Median = median(x, na.rm = TRUE),
-                                Mean   = mean(x, na.rm = TRUE),
-                                Q3     = quantile(x, 0.75, na.rm = TRUE),
-                                Max    = max(x, na.rm = TRUE)
-                            )
+    write.csv(summary_before, "./Imputation/Outputs/Summary_before_imputation.csv", row.names = FALSE)
+
+
+    summary_after <- map_dfr(names(all_imputed), function(varname) {
+
+            ## extracts imputation data for variable x
+            imp <- all_imputed[[varname]]
+
+            ## summarise descriptives for each imputation
+            per_imp <- map_dfr(1:5, function(m) {
+                                
+                        completed <- complete(imp, action = m)
+                                tibble(
+                                    variable   = varname,
+                                    imputation = as.character(m),
+                                    n    = sum(!is.na(completed[[varname]])),
+                                    mean = round(mean(completed[[varname]], na.rm = TRUE), 3),
+                                    sd   = round(sd(completed[[varname]], na.rm = TRUE), 3),
+                                    median = round(median(completed[[varname]], na.rm = TRUE), 3),
+                                    iqr = round(IQR(completed[[varname]], na.rm = TRUE), 3),
+                                    min  = round(min(completed[[varname]], na.rm = TRUE), 3),
+                                    max  = round(max(completed[[varname]], na.rm = TRUE), 3)
+                                )
                         })
 
-    ## row bind the summaries, then average values across columns
-    after <- do.call(rbind, imp_summaries) |>
-                colMeans()
-    after <- as.data.frame(t(after))
+            ## summarise descriptives across all imputations 
+            mean_row <- per_imp |>
+                            summarise(
+                                variable = varname, 
+                                imputation = "mean_across_5",
+                                n = mean(n), 
+                                mean = round(mean(mean), 3),
+                                sd = round(mean(sd), 3),
+                                median = round(mean(median), 3),
+                                iqr = round(mean(iqr), 3),
+                                min = round(mean(min), 3),
+                                max = round(mean(max), 3))
 
-    ## Save summaries of before / after imputation for supplementary materials
-    write.csv(before, paste0("./Imputation/Outputs/", dataset, var, "_Summary_before.csv"), row.names = F)
-    write.csv(after, paste0("./Imputation/Outputs/", dataset, var, "_Summary_after.csv"), row.names = F)
-
-    ## Save data distribution after imputation across all 5 iterations for supplementary materials
-    pdf(paste0("./Imputation/Outputs/", dataset, var, "_Imputation_values.pdf"))
-        print(stripplot(tempData, as.formula(paste0(var, " ~ .imp")), pch = 19, xlab = "Imputation number"))
-    dev.off()
-
-    ## Put back subject ids before exporting rds object so we can use it in regression
-    list_with_ids <- lapply(1:tempData$m, function(i) {
-        df <- complete(tempData, i)
-        df$subj_id <- subj_ids
-        df
+            bind_rows(per_imp, mean_row)
     })
 
-    ## save our final imputed data as rds to be used in regression models after
-    write_rds(list_with_ids, paste0("./Imputation/Outputs/", dataset, var, "_tempData.rds"))
+    write.csv(summary_after, "./Imputation/Outputs/summary_after_imputation.csv", row.names = FALSE)
 }
 
 
-## This function cleans our imputed data lists
-Return.Cleaned.Lists <- function(data, dataset) {
+## Run all the steps
+Run.Imputation <- function(data.SPAD, data.Jena, ...) {
 
-    ## Reads our original data
-    df <- read_rds(data)
+    ## Read our .rds prepared data
+    spad <- read_rds(data.SPAD)
 
-    ## List all .rds files of our datasdet (SPAD or Jena)
-    files <- list.files("./Imputation/Outputs/", pattern = paste0("^", dataset, ".*\\.rds$"), full.names = TRUE)
+    ## Select the vars to be imputed
+    to_impute <- spad |>
+                    select(all_of(c(...))) 
 
-    ## Reads all the .rds files we listed
-    imp_lists <- lapply(files, readRDS)
+    ## Impute data and plot imputed values                         
+    all_imputed <- lapply(names(to_impute), function(i) {
+        
+        ## imputation
+        imp <- Imputation(spad, i)
 
-    ## Get original filenames to clean future variable names
-    var_names <- basename(files)
-    ## 1. Remove the dataset prefix (e.g. "SPAD_" or "Jena_") — matches whatever
-    ##    "dataset" was passed in, so this isn't hardcoded to one dataset
-    var_names <- gsub(paste0("^", dataset, "_"), "", var_names)
-    ## 2. Remove _tempData.rds
-    var_names <- gsub("_tempData\\.rds$", "", var_names)
+        ## plot stripplots of imputed data
+        pdf(paste0("./Imputation/Outputs/Stripplot_", i, ".pdf"))
+            print(stripplot(imp, as.formula(paste0(i, "~ .imp")), pch = 19, xlab = "Imputation number"))
+        dev.off()
 
-    ## Assigns our new cleaned names to our imputed values lists
-    names(imp_lists) <- var_names
+        return(imp)
+    }) 
+                     
 
-    ## Extract the imputed column (first column) and subj id for each iteration
-    clean_lists <- lapply(imp_lists, function(var_list) {
+    ## Plot convergence 
+    ## for go no go, will not have sd panels because only 1 missing data point
+    ## so cannot compute SD (SD of a single nb is undefined)                       
+    pdf("./Imputation/Outputs/Convergence_Chains.pdf")
 
-        ## Extract the names of the imputed column (first column)
-        imputed_col <- names(var_list[[1]])[1]
+        ## in order:
+        ## flu verb p, ani, gonogo correct, omissions, commissions, mean RT
+        invisible(lapply(all_imputed, function(imp) {
+            print(plot(imp))
+        }))
 
-        ## Extract that column for each iteration + subj id
-        lapply(var_list, function(df) {
-            data.frame(
-                subj_id = df$subj_id,
-                value   = df[[imputed_col]]
-            )
-        })    
-    })
+    dev.off()                         
 
-    return(clean_lists)
-}
+    ## sets the names in our list
+    names(all_imputed) <- names(to_impute)
 
+    ## Data summaries before and after imputation
+    Summary.Before.After(spad, to_impute, all_imputed)                  
 
-## This function builds our newly imputed datasets
-Build.Imputed.Datasets <- function(df, clean_lists) {
+    jena <- read_rds(data.Jena)
 
-    completed <- vector("list", 5)
+    ## Builds imputed datasets                         
+    for (imp in 1:5) {
 
-    for (i in 1:5) {
+        spad_imputed <- spad 
 
-        temp <- df
-
-        for (v in names(clean_lists)) {
-
-            imp_df <- clean_lists[[v]][[i]]   # iteration i: df(subj_id, value)
-
-            # merge imputed values into temp by subj_id
-            temp <- merge(temp, imp_df, by = "subj_id", all.x = TRUE)
-
-            # replace missing values in the original variable
-            temp[[v]][is.na(temp[[v]])] <- temp$value[is.na(temp[[v]])]
-
-            # remove helper column
-            temp$value <- NULL
+        for (var in names(all_imputed)) {
+            spad_imputed[[var]] <- complete(all_imputed[[var]], action = imp) |>
+                                        pull(all_of(var))
         }
 
-        completed[[i]] <- temp
-    }
-
-    names(completed) <- paste0("imp", 1:5)
-    return(completed)
-}
-
-
-## This function saves a .rds file for each new dataset
-Save.Imputed.Datasets <- function(completed, dataset) {
-
-    for (name in names(completed)) {
-        saveRDS(
-            completed[[name]],
-            file = paste0("./Imputation/Outputs/", dataset, "_", name, ".rds")
-        )
-    }
-}
-
-
-## This functions wraps our previous functions for the pipeline to make the imputed datasets
-Make.Imputed.Datasets <- function(data, dataset) {
-
-    clean_lists <- Return.Cleaned.Lists(data, dataset)
-
-    df <- read_rds(data)
-
-    completed <- Build.Imputed.Datasets(df, clean_lists)
-
-    Save.Imputed.Datasets(completed, dataset)
-}
-
-
-Make.All.Datasets <- function(dataset_spad, dataset_jena) {
-
-    all_sets <- vector("list", 5)
-
-    for (i in 1:5) {
-
-        spad <- readRDS(paste0("./Imputation/Outputs/SPAD_imp", i, ".rds"))
-        jena <- readRDS(paste0("./Imputation/Outputs/JENA_imp", i, ".rds"))
-
-        all_sets[[i]] <- bind_rows(spad, jena)
-    }
-
-    names(all_sets) <- paste0("all_imp", 1:5)
-    return(all_sets)
-}
-
-
-Save.All.Datasets <- function(dataset_spad, dataset_jena) {
-
-    all_sets <- Make.All.Datasets(dataset_spad, dataset_jena)
-
-    for (name in names(all_sets)) {
-        saveRDS(
-            all_sets[[name]],
-            file = paste0("./Imputation/Outputs/", name, ".rds")
-        )
+        full_dataset <- bind_rows(spad_imputed, jena)
+        write_rds(full_dataset, paste0("./Imputation/Outputs/imputed_dataset_", imp, ".rds"))
     }
 }
