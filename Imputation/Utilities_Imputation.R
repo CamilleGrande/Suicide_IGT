@@ -142,7 +142,14 @@ Run.Imputation <- function(data.SPAD, data.Jena, ...) {
                                         pull(all_of(var))
         }
 
+        ## z score go no go values for each imputation
+        spad_imputed$zscore_gonogo_total_correct <- as.numeric(scale(spad_imputed$spad_gonogo_total_correct))
+        spad_imputed$zscore_gonogo_total_commissions <- as.numeric(scale(spad_imputed$spad_gonogo_total_commissions))
+        spad_imputed$zscore_gonogo_total_omissions <- as.numeric(scale(spad_imputed$spad_gonogo_total_omissions))
+
+        ## bind spad and suicide decide
         full_dataset <- bind_rows(spad_imputed, jena)
+
         write_rds(full_dataset, paste0("./Imputation/Outputs/imputed_dataset_", imp, ".rds"))
     }
 }

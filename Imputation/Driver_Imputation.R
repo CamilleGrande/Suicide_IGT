@@ -27,7 +27,7 @@ Run.Imputation(SPAD, SUICIDEDECIDE, c(
         ## vars to impute
         "flu_verb_p", 
         "flu_verb_ani", 
-        "zscore_gonogo_total_correct", 
-        "zscore_gonogo_total_omissions", 
-        "zscore_gonogo_total_commissions", 
+        "spad_gonogo_total_correct", 
+        "spad_gonogo_total_commissions", 
+        "spad_gonogo_total_omissions", 
         "gonogo_mean_rt"))
