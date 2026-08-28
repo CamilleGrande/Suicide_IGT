@@ -11,6 +11,11 @@
 
 source("./Regression/Utilities_Regression.R")
 
+## set libraries
+library(tidyverse)
+library(lme4)
+
+
 if (!require("pacman", quietly = TRUE)) install.packages("pacman")
 pacman::p_load(
   # Données
@@ -28,7 +33,11 @@ pacman::p_load(
   # Coefficients standardisés
   lm.beta,
   # Imputation
-  mice
+  mice,
+  # train/test sampling
+  caret,
+  # multinom
+  nnet
 )
 
 
@@ -36,6 +45,7 @@ pacman::p_load(
 unlink("./Regression/Outputs", recursive = TRUE)
 dir.create("./Regression/Outputs", recursive = TRUE)
 
+all.data = "./Imputation/Data/All_Imputation.rds"
 
 # Thème ggplot global
 theme_set(theme_bw(base_size = 12))
@@ -57,19 +67,13 @@ n.imp <- 5
 ## If ran imputation script before, should not modify the name of the files as they are created through this other script; otherwise adapt the paths/names
 ## If number of imputations is incorrect, will create path to files that don't exist (e.g. 5 imputations but creates path "imp6")
 ## and script won't run!!
-imp      <- file.path("./Imputation/Outputs", sprintf("all_imp%d.rds", 1:n.imp))
-Jena_imp <- file.path("./Imputation/Outputs", sprintf("Jena_imp%d.rds", 1:n.imp))
+imp      <- file.path("./Imputation/Outputs", sprintf("imputed_dataset_%d.rds", 1:n.imp))
  
 ## Regression() prefixes its outputs (e.g. "All_Cook_Graph.pdf") with whatever prefix we specified,
 ## so each run's files don't overwrite the other's. The "no outliers" paths below must match that
 ## same prefix, since Regression() writes to them first, then reads them back in.
-no.outliers.path <- function(prefix) {
-    file.path("./Regression/Outputs", sprintf("%s_imp_df_without_infl_obs_%d.rds", prefix, 1:n.imp))
-}
+no.outliers.path <- file.path("./Regression/Outputs", sprintf("imp_df_without_infl_obs_%d.rds", 1:n.imp))
  
-#no.outliers.imp.all             <- no.outliers.path("All")
-#no.outliers.imp.suicide.decide  <- no.outliers.path("SUICIDE-DECIDE")
-
 ## Adapt arguments as needed
 ##      imputed.datasets = all imputed datasets (can have as many as needed; minimum is 1). This is changed through paths, not the argument in itself
 ##      imputed.datasets.no.outliers = DO NOT CHANGE, holds path to dataset with no outliers. Even if you have no outliers, keep it like this
@@ -81,13 +85,17 @@ no.outliers.path <- function(prefix) {
 ##      IV = Independent variables (predictors) 
 
 ## ------- All (SPAD + SUICIDE-DECIDE) -------
-Regression(imputed.datasets = imp, imputed.datasets.no.outliers = no.outliers.path("All"), cohort = "all", prefix = "All", group = NULL,
+Regression(imputed.datasets = imp, imputed.datasets.no.outliers = no.outliers.path, 
     DV = "K", method = "backward", 
-    IV = c("age", "sex", "group", "bdi_zscore", "zscore_gonogo_total_omissions", "zscore_gonogo_total_commissions", "flu_verb_p", "flu_verb_ani", "site", "cohort"))
+    IV = c("age", "sex", "group", "bdi_zscore", "zscore_gonogo_total_omissions", "zscore_gonogo_total_commissions", "zscore_gonogo_total_correct", "gonogo_mean_rt", "flu_verb_p", "flu_verb_ani", "site", "cohort"))
+
+Regression.Exclude.NA(all.data, DV = "K", method = "backward", 
+    IV = c("age", "sex", "group", "bdi_zscore", "zscore_gonogo_total_omissions", "zscore_gonogo_total_commissions", "zscore_gonogo_total_correct", "gonogo_mean_rt", "flu_verb_p", "flu_verb_ani", "site", "cohort"))
 
 
 
-## ------- SUICIDE-DECIDE ONLY -------
-Regression(imputed.datasets = Jena_imp, imputed.datasets.no.outliers = no.outliers.path("SUICIDE-DECIDE"), cohort = "SUICIDE-DECIDE", prefix = "SUICIDE-DECIDE", group = "SA", 
-    DV = "K", method = "backward", 
-    IV = c("age", "sex", "group_lethality", "sis_total", "bdi2_sum", "jena_gonogo_total_omissions", "jena_gonogo_total_commissions", "flu_verb_p", "flu_verb_ani", "site", "cohort"))
+    ## /Users/camillegrande/Desktop/SPAD/Imputation/Data/SPAD_Imputation.rds
+
+
+    ## put as rds
+    ## /Users/camillegrande/Desktop/SPAD/Multinomial_Logistic_Regression_data_jena.csv

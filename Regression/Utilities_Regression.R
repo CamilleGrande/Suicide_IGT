@@ -1,20 +1,14 @@
 # Utilities_Regression.R
-# Author: Camille Grandé
+# Author: Lucas De Zorzi & Camille Grandé
 # Study: SPAD
 # Description:
 #       This script holds the utility functions necessary to run the 
 #       correlation/regression part of the SPAD study
 
 
-## Builds an output file path prefixed with the run's name (e.g. "All", "SUICIDE-DECIDE")
-## so that outputs from different Regression() calls don't overwrite each other
-Output.Path <- function(prefix, filename) {
-    file.path("./Regression/Outputs", paste0(prefix, "_", filename))
-}
-
 ## This function fits a given number of models (depending on imputed datasets given) with the specified parameters
 ## and returns a list with all our models
-Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
+Fit.Models <- function(imputed.datasets, DV, method, IV) {
 
     cat("\n=== MODEL FITTING ===\n")
 
@@ -28,10 +22,6 @@ Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
 
         ## Reads imputed dataset
         my.data <- readr::read_rds(imp)
-  
-        if (!is.null(group)) {
-            my.data <- dplyr::filter(my.data, group == !!group)
-        }
 
         ## Fits model for this dataset
         complete_model <- lm(complete_formula, data = my.data)
@@ -44,7 +34,7 @@ Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
                         step(complete_model, direction = method, trace = 0)
                     }
 
-        cat("\nCohort:", cohort, "| N:", nrow(my.data), "| DV:", DV,
+        cat("\nN:", nrow(my.data), "| DV:", DV,
         "\nFinal formula:", deparse(formula(model)), "\n")
 
         return(model)
@@ -53,9 +43,10 @@ Fit.Models <- function(imputed.datasets, cohort, group = NULL, DV, method, IV) {
     return(models)
 }
 
+
 ## Check the outliers using Cook's distance
 ## and returns updated imputed dfs without those observations
-Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
+Check.Outliers.Cook <- function(models, imputed.datasets, sub) {
 
     cat("\n=== COOK'S DISTANCE ===\n")
 
@@ -90,7 +81,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
 
     ## Synthesizes which cook's distances are influent across all imputations
     ## We will get rid of observations that are influent across a majority of datasets
-        cook_synthesis <- cook_df |>
+    cook_synthesis <- cook_df |>
                         group_by(subj_id) |>
                             summarise(
                                 n_influent    = sum(influent),
@@ -109,13 +100,13 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
     ## Keep ids of influent observations for log purposes
     cook_synthesis |>
         filter(n_influent >= majority) |>
-            write.csv(Output.Path(prefix, "Check_Influent_Observations.csv"), row.names = F)
+            write.csv("./Regression/Outputs/Check_Influent_Observations.csv", row.names = F)
 
 
     mean_threshold <- mean(4 / sapply(models, function(m) length(residuals(m))))
 
     ## Creates graph for supplementary materials
-    pdf(Output.Path(prefix, "Cook_Graph.pdf"))
+    pdf("./Regression/Outputs/Cook_Graph.pdf")
         cook_plot <- cook_synthesis |>
                         mutate(label = ifelse(n_influent >= 3, as.character(subj_id), "")) %>%
                             ggplot(aes(x = reorder(subj_id, mean_cook), 
@@ -148,9 +139,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
 
     ## Save each filtered imputed dataset as an RDS file
     lapply(seq_along(imp_df_without_infl_obs), function(i) {
-        write_rds(
-            imp_df_without_infl_obs[[i]],
-            Output.Path(prefix, paste0("imp_df_without_infl_obs_", i, ".rds")))
+        write_rds(imp_df_without_infl_obs[[i]], paste0("./Regression/Outputs/imp_df_without_infl_obs_", i, ".rds"))
     })
 
     return(imp_df_without_infl_obs)
@@ -159,7 +148,7 @@ Check.Outliers.Cook <- function(models, imputed.datasets, sub, prefix) {
 
 ## This function computes Grubb's test for outliers
 ## It quits our script if outliers are detected!
-Check.Outliers.Grubb <- function(my_models_without_influent, prefix) {
+Check.Outliers.Grubb <- function(my_models_without_influent) {
 
     cat("\n=== GRUBB ===\n")
 
@@ -183,7 +172,7 @@ Check.Outliers.Grubb <- function(my_models_without_influent, prefix) {
     outliers <- grubbs_results |>
                     dplyr::filter(conclusion == "Outlier values detected")
     
-    write.csv(outliers, Output.Path(prefix, "Check_Grubbs_Outliers.csv"), row.names = F)
+    write.csv(outliers, "./Regression/Outputs/Check_Grubbs_Outliers.csv", row.names = F)
 
     if (nrow(outliers) > 0) {
         cat("Grubb's test detected outliers; Inspect your data and re-run the script\n")
@@ -194,7 +183,7 @@ Check.Outliers.Grubb <- function(my_models_without_influent, prefix) {
 }
 
 
-Check.Variance.Inflation.Factor <- function(my_models_without_influent, prefix) {
+Check.Variance.Inflation.Factor <- function(my_models_without_influent) {
 
     cat("\n=== VIF ===\n")
 
@@ -238,7 +227,7 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent, prefix) 
                             TRUE            ~ "High Multicollinearity"
                         )
 
-    write.csv(vif_df, Output.Path(prefix, "Check_VIF_Multicollinearity.csv"), row.names = F)
+    write.csv(vif_df, "./Regression/Outputs/Check_VIF_Multicollinearity.csv", row.names = F)
 
     if (any(vif_df$Statut %in% c("Moderate Multicollinearity", "High Multicollinearity"))) {
         cat("Variance Inflation Factor detected moderate / high multicollinearity; Inspect your data and re-run the script\n")
@@ -249,7 +238,7 @@ Check.Variance.Inflation.Factor <- function(my_models_without_influent, prefix) 
 }
 
 
-Check.Residuals.Normality <- function(my_models_without_influent, prefix) {
+Check.Residuals.Normality <- function(my_models_without_influent) {
 
     cat("\n=== NORMALITY OF RESIDUALS (SHAPIRO WILK & QQ-PLOTS) ===\n")
 
@@ -264,9 +253,9 @@ Check.Residuals.Normality <- function(my_models_without_influent, prefix) {
         )
     })
 
-    write.csv(shapiro_results, Output.Path(prefix, "Check_Shapiro_Residuals_Normality.csv"), row.names = F)
+    write.csv(shapiro_results, "./Regression/Outputs/Check_Shapiro_Residuals_Normality.csv", row.names = F)
  
-    pdf(Output.Path(prefix, "QQ_Plots_Residuals_Normality.pdf"))
+    pdf("./Regression/Outputs/QQ_Plots_Residuals_Normality.pdf")
         par(mfrow = c(2, 3))
         for (i in seq_along(my_models_without_influent)) {
             qqnorm(residuals(my_models_without_influent[[i]]), 
@@ -280,7 +269,7 @@ Check.Residuals.Normality <- function(my_models_without_influent, prefix) {
 }
 
 
-Check.Homoscedasticity <- function(my_models_without_influent, prefix) {
+Check.Homoscedasticity <- function(my_models_without_influent) {
 
     cat("\n=== HOMOSCEDASTICITY (BREUSCH PAGAN) ===\n")
 
@@ -297,7 +286,7 @@ Check.Homoscedasticity <- function(my_models_without_influent, prefix) {
         )
     })
 
-    write.csv(bp_results, Output.Path(prefix, "Check_Homoscedasticity_Breusch_Pagan.csv"))
+    write.csv(bp_results, "./Regression/Outputs/Check_Homoscedasticity_Breusch_Pagan.csv")
 
     ## Number of imputations, and majority threshold (adapts to however many were provided)
     n.imp    <- length(my_models_without_influent)
@@ -306,7 +295,19 @@ Check.Homoscedasticity <- function(my_models_without_influent, prefix) {
     ## Count nb of imputations with heteroscedasticity
     n_hetero <- sum(bp_results$p_value < .05)
 
-     ## Our cut-off to say heteroscedasticity is present is a majority of imputations with heteroscedasticity
+    ## plot residuals
+    pdf("./Regression/Outputs/Plot_Residuals.pdf")
+        par(mfrow = c(2, 3))
+        for (i in seq_along(my_models_without_influent)) {
+            plot(fitted(my_models_without_influent[[i]]), residuals(my_models_without_influent[[i]]),
+                    xlab = "Fitted values", ylab = "Residuals",
+                    main = paste("Residuals VS Fitted - imp", i))
+            abline(h = 0, lty = 2)
+        }
+        par(mfrow = c(1, 1))
+    dev.off()
+
+    ## Our cut-off to say heteroscedasticity is present is a majority of imputations with heteroscedasticity
     if (n_hetero >= majority) {
         
         cat("\nHeteroscedasticity in ", n_hetero, " of", n.imp, "imputations → moving on with robust error HC3\n\n")
@@ -328,25 +329,24 @@ Check.Homoscedasticity <- function(my_models_without_influent, prefix) {
 }
 
 
-Pooling.Models <- function(models, prefix) {
+
+Pooling.Models <- function(models) {
 
     cat("\n=== POOLING MODELS ... ===\n")
 
     ## as.mira to be able to pool them after
     models_mira <- as.mira(models)
 
-    ## Pooling all models
-    #     models_pooled <- pool(models)
-
     models_pooled <- pool(models_mira)
 
-    cat("\n── pooling R²...  ──\n")
+    cat("\n── pooling R²  ──\n")
         ## R2 pooled of our models
         r2_pooled <- pool.r.squared(models_pooled)
     print(r2_pooled) 
 
     pooled_summary <- summary(models_pooled)
-    write.csv(pooled_summary, Output.Path(prefix, "Pooled_Regression_Summary.csv"))
+    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary.csv")
+    readr::write_rds(models_pooled, "./Regression/Outputs/Pooled_Models.rds")
 
     return(pooled_summary)
 }
@@ -356,7 +356,7 @@ Pooling.Models <- function(models, prefix) {
 ## variance in place of the default OLS variance. mice::pool() has no option
 ## for a custom vcov, so we do the pooling by hand, term by term, using
 ## mice::pool.scalar() (the same thing pool() uses internally per coefficient).
-Pooling.Models.Robust <- function(models, prefix) {
+Pooling.Models.Robust <- function(models) {
 
     cat("\n=== POOLING MODELS (ROBUST HC3 SE) ===\n")
  
@@ -386,17 +386,25 @@ Pooling.Models.Robust <- function(models, prefix) {
     })
  
     pooled_summary <- bind_rows(pooled_rows)
+
+    ## Pooled R² (computed via standard pooling; coefficients are the same either way,
+    ## HC3 only changes the SEs, not R², so this is independent of the robust pooling above)
+    models_mira   <- as.mira(models)
+    models_pooled <- pool(models_mira)
+    r2_pooled     <- pool.r.squared(models_pooled)
+
+    cat("\nPooled R^2:\nEstimate, 95CI low, 95CI high, fmi\n", r2_pooled, "\n")
  
     cat("\n── pooled estimates (robust HC3) ──\n")
     print(pooled_summary)
  
-    write.csv(pooled_summary, Output.Path(prefix, "Pooled_Regression_Summary_Robust.csv"), row.names = FALSE)
+    write.csv(pooled_summary, "./Regression/Outputs/Pooled_Regression_Summary_Robust.csv", row.names = FALSE)
 
     return(pooled_summary)
 }
 
 
-Check.Linearity <- function(my_models_without_influent, prefix) {
+Check.Linearity <- function(my_models_without_influent) {
 
     cat("\n=== LINEARITY (RAMSEY, MODEL SPECIFICATION) ===\n")
 
@@ -415,7 +423,7 @@ Check.Linearity <- function(my_models_without_influent, prefix) {
         )
     })
 
-    write.csv(reset_results, Output.Path(prefix, "Check_RESET_Test.csv"), row.names = FALSE)
+    write.csv(reset_results, "./Regression/Outputs/Check_RESET_Test.csv", row.names = FALSE)
 
     print(reset_results)
 
@@ -425,7 +433,7 @@ Check.Linearity <- function(my_models_without_influent, prefix) {
     ## Plots the residuals against the fitted values and predictors
     ## If most of the two lines overlap (reference line (mean = 0) and conditional mean); no evidence
     ## that assumption of lienarity has been violated
-    pdf(Output.Path(prefix, "Linearity_Residuals_vs_Fitted.pdf"))
+    pdf("./Regression/Outputs/Linearity_Residuals_vs_Fitted.pdf")
         for (i in seq_along(my_models_without_influent)) {
             
             ## Plots residuals against fitted values
@@ -494,14 +502,11 @@ Check.Linearity <- function(my_models_without_influent, prefix) {
         }
     dev.off()
 
-
-
     cat("\nLinearity plots (residuals vs fitted) can be found in Outputs folder; inspect them for non-linearity\n\n")
-
 }
 
 
-Check.Residuals.Independence <- function(models, prefix) {
+Check.Residuals.Independence <- function(models) {
 
     cat("\n=== INDEPENDENCE OF RESIDUALS (DURBIN-WATSON) ===\n")
 
@@ -519,81 +524,75 @@ Check.Residuals.Independence <- function(models, prefix) {
             )
     })
 
-     write.csv(dw_results, Output.Path(prefix, "Check_Residuals_Independence.csv"))
+    write.csv(dw_results, "./Regression/Outputs/Check_Residuals_Independence.csv")
 }
- 
- 
-Regression <- function(imputed.datasets, imputed.datasets.no.outliers, cohort, prefix, group = NULL, DV, method, IV) {
+
+
+Regression <- function(imputed.datasets, imputed.datasets.no.outliers, DV, method, IV) {
 
     ## Keep our subject ids here for when need them
     ## Must mirror the same group filter Fit.Models applies, otherwise subj_ids won't
     ## line up row-for-row with the Cook's distances computed on the filtered data
-    subj_ids <- read_rds(imputed.datasets[1])
-    if (!is.null(group)) {
-        subj_ids <- dplyr::filter(subj_ids, group == !!group)
-    }
-    subj_ids <- dplyr::select(subj_ids, subj_id)
+    subj_ids <- read_rds(imputed.datasets[1]) |>
+                    dplyr::select(subj_id)
 
-    ## site & cohort are only meaningful when pooling across the full "all" dataset;
-    ## when running on a single dataset (e.g. "SPAD" or "SUICIDE-DECIDE"), they're constant
-    ## within that dataset and shouldn't be used as predictors.
-    ## This works regardless of whether the caller already included them in IV or not.
-    if (cohort == "all") {
-        IV <- union(IV, c("site", "cohort"))
-    } else {
-        IV <- setdiff(IV, c("site", "cohort"))
-    }
-    cat("\nIVs used for cohort '", cohort, "': ", paste(IV, collapse = ", "), "\n", sep = "")
+    cat("\nIVs used for MLR: ", paste(IV, collapse = ", "), "\n", sep = "")
 
     ## First, we fit the initial models for all imputations
-    my_models <- Fit.Models(imputed.datasets, cohort, group = group, DV, method, IV)
+    my_models <- Fit.Models(imputed.datasets, DV, method, IV)
 
     ## Then we check for outliers with Cook's distance
     ## This function also removes the outliers to give us updated dfs without thos subjects, for each imputation
     ## Subjects are excluded if they are outliers on at least 3 imputations
-    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids, prefix)
+    imp_dfs_without_influent <- Check.Outliers.Cook(my_models, imputed.datasets, subj_ids)
+
+    ## get rid of "flu_verb_p" as a predictor as only appears in one imputed dataset model
+    ## and won't be able to pool models if not same predictors
+    char_tibble <- tibble(value = IV) |>
+                    filter(!value %in% c("flu_verb_p"))
+    updated_IV <- pull(char_tibble, value)
 
     ## Here, we re-fit the models without the outliers 
-    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, cohort, group = group, DV, method, IV)
+    my_models_without_influent <- Fit.Models(imputed.datasets.no.outliers, DV, method, updated_IV)
 
     ## Next, we check for outliers with Grubb's test
     ## If it detects outliers, it will quit the environment and you should check the data
-    Check.Outliers.Grubb(my_models_without_influent, prefix)
+    Check.Outliers.Grubb(my_models_without_influent)
 
     ## We assess multicollinearity
     ## If it detects outliers, it will quit the environment and you should check the data
-    Check.Variance.Inflation.Factor(my_models_without_influent, prefix)
+    Check.Variance.Inflation.Factor(my_models_without_influent)
 
     ## Check that the residuals are normally distributed
     ## using Shapiro Wilk's test and QQ-plot inspection
-    Check.Residuals.Normality(my_models_without_influent, prefix)
+    Check.Residuals.Normality(my_models_without_influent)
 
     ## Check Homoscedasticity with Breusch Pagan test
     ## If heteroscedasticity in 3 or more imputations, compute robust regression models
-    homoscedasticity_check <- Check.Homoscedasticity(my_models_without_influent, prefix)
+    homoscedasticity_check <- Check.Homoscedasticity(my_models_without_influent)
     my_models_without_influent <- homoscedasticity_check$models
 
     ## Pools our models in one final model, using robust HC3 pooling if needed
     if (homoscedasticity_check$robust) {
-        pooled_summary <- Pooling.Models.Robust(my_models_without_influent, prefix)
+        pooled_summary <- Pooling.Models.Robust(my_models_without_influent)
     } else {
-        pooled_summary <- Pooling.Models(my_models_without_influent, prefix)
+        pooled_summary <- Pooling.Models(my_models_without_influent)
     }
 
     ## Check linearity to detect specification errors in the model
     ## Uses Ramsey Regression Equation Specification Error Test (RESET)
     ## Significant p-value = relationship btw predictors and outcomes might not be linear
-    Check.Linearity(my_models_without_influent, prefix)
+    Check.Linearity(my_models_without_influent)
 
-    Check.Residuals.Independence(my_models_without_influent, prefix)
+    Check.Residuals.Independence(my_models_without_influent)
  
-    Plots(pooled_summary, prefix)
+    Plots(pooled_summary)
 
     cat("\n\n===== All modelling and plots correctly ran! =====\n\n")
 }
 
 
-Plots <- function(pooled_summary, prefix) {
+Plots <- function(pooled_summary) {
         
     p <- ggplot(pooled_summary, aes(x = estimate, y = term)) +
         geom_point(size = 3) +
@@ -608,5 +607,133 @@ Plots <- function(pooled_summary, prefix) {
         ) +
         theme_minimal()
 
-    ggsave(Output.Path(prefix, "Forest_Plot.pdf"), plot = p)
+    ggsave("./Regression/Outputs/Forest_Plot.pdf", plot = p)
+}
+
+
+Regression.Exclude.NA <- function(all.data, DV, method, IV) {
+
+    data <- read_rds(all.data)
+
+    ## reduce to n = 143 non-NA subj
+    data <- data |> 
+                dplyr::select(all_of(c("subj_id", "K", "age", "sex", "group", 
+                                "bdi_zscore", "zscore_gonogo_total_omissions", 
+                                "zscore_gonogo_total_commissions", 
+                                "zscore_gonogo_total_correct", "gonogo_mean_rt", 
+                                "flu_verb_p", "flu_verb_ani", "site", "cohort"))) |>
+                                    drop_na()
+
+    subj_ids <- data |>
+                    dplyr::select(subj_id)
+    
+
+    cat("\n=== MODEL FITTING ===\n")
+    ## Create our formula with our dependent variable and all our inependent variable
+    complete_formula <- as.formula(paste(DV, "~", paste(IV, collapse = " + ")))
+    cat(paste(complete_formula))
+
+    ## Fits model for this dataset
+    complete_model <- lm(complete_formula, data = data)
+    complete_model$call$data <- data
+
+     ## Adjusts model with our method if we specified one
+    model <- if (method == "none") {
+                    complete_model
+                } else {
+                    step(complete_model, direction = method, trace = 0)
+                }
+    
+    cat("\nN:", nrow(data), "| DV:", DV, "\nFinal formula:", deparse(formula(model)), "\n")
+
+
+    cat("\n=== COOK'S DISTANCE ===\n")
+    cd  <- cooks.distance(model)
+
+    ## cook's threshold
+    threshold <- 4 / length(cd)
+
+    cook_df <- data.frame(
+                    subj_id  = subj_ids,
+                    cook     = as.numeric(cd),
+                    seuil    = threshold,
+                    influent = cd > threshold
+                )
+
+
+    ## Keep ids of influent observations for log purposes
+    cook_df |>
+        filter(influent == T) |>
+            write.csv("./Regression/Outputs/NA_Check_Influent_Observations.csv", row.names = F)
+
+    mean_threshold <- mean(4 / length(residuals(model)))
+
+    ## Creates graph for supplementary materials
+    pdf("./Regression/Outputs/NA_Cook_Graph.pdf")
+        cook_plot <- cook_df |>
+                        mutate(label = ifelse(influent == T, as.character(subj_id), "")) %>%
+                            ggplot(aes(x = reorder(subj_id, cook), 
+                                        y = cook, 
+                                        fill = influent)) +
+                            geom_col() +
+                            geom_hline(yintercept = mean_threshold, linetype = "dashed", color = "red") +
+                            scale_fill_manual(values = setNames(
+                                c("#E63946", "#457B9D"),
+                                c("TRUE", "FALSE")
+                            )) +
+                            labs(title = "Cook's distance",
+                                    x = "Participant", y = "Cook's distance", fill = "Influent") +
+                            theme_bw() +
+                            theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+        print(cook_plot)
+    dev.off()
+
+    influent_ids <- subset(cook_df, influent == TRUE) |>
+                        dplyr::select(subj_id)
+
+    ## n = 137 without influent observations
+    imp_df_without_infl_obs <- data |>
+                                    dplyr::filter(!subj_id %in% influent_ids$subj_id)
+    
+    ## Fits model without outliers
+    my_models_without_influent <- lm(complete_formula, data = imp_df_without_infl_obs)
+    my_models_without_influent$call$data <- imp_df_without_infl_obs
+
+     ## Adjusts model with our method if we specified one
+    model <- if (method == "none") {
+                    my_models_without_influent
+                } else {
+                    step(my_models_without_influent, direction = method, trace = 0)
+                }
+    
+    cat("\nN:", nrow(imp_df_without_infl_obs), "| DV:", DV, "\nFinal formula:", deparse(formula(model)), "\n")
+
+    cat("\n=== POOLING MODELS (ROBUST HC3 SE) ===\n")
+    robust_vcov <- vcovHC(model, type = "HC3")
+
+    terms      <- names(coef(model))
+    estimate   <- coef(model)
+    std.error  <- sqrt(diag(robust_vcov))
+    statistic  <- estimate / std.error
+    df         <- model$df.residual   # ordinary residual df for a single lm() model
+    p.value    <- 2 * pt(-abs(statistic), df = df)
+
+    model_summary <- data.frame(
+        term      = terms,
+        estimate  = estimate,
+        std.error = std.error,
+        statistic = statistic,
+        df        = df,
+        p.value   = p.value,
+        row.names = NULL
+    )
+
+    r2 <- summary(model)$r.squared
+
+    cat("\nR^2:\nEstimate, 95CI low, 95CI high, fmi\n", r2, "\n")
+ 
+    cat("\n── pooled estimates (robust HC3) ──\n")
+    print(model_summary)
+ 
+    write.csv(model_summary, "./Regression/Outputs/NA_Regression_Summary_Robust.csv", row.names = FALSE)    
 }
