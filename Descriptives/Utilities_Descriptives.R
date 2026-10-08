@@ -93,6 +93,8 @@ Tidy.SUICIDEDECIDE <- function(ids.IGT, data.SUICIDEDECIDE) {
                     gonogo_omi = as.integer(gonogo_total_omissions),
                     fluverb_p = as.integer(FluVerb_P),
                     fluverb_ani = as.integer(FluVerb_Ani),
+                    fnart = as.integer(fnart),
+                    mwt = as.integer(mwt),
                     .keep = "none") |>
                       ## HC don't take any ttt
                               mutate(
@@ -289,7 +291,7 @@ SUICIDEDECIDE.Descriptives <- function(ids.IGT, data.SUICIDEDECIDE) {
   ## Separate numeric and frequency vars for summaries
   numeric_vars <- tidy |>
                     select(all_of(c("group", "age", "nb_actual_sa_py", "sis_total", "bdi2_total", 
-                                    "gonogo_mean_rt", "gonogo_corr", "gonogo_comm", "gonogo_omi", "fluverb_p", "fluverb_ani")))
+                                    "gonogo_mean_rt", "gonogo_corr", "gonogo_comm", "gonogo_omi", "fluverb_p", "fluverb_ani", "fnart", "mwt")))
 
   frequency_vars <- tidy |>
                     select(all_of(c("group", "sex", "actual_lethality_most_lethal", "diploma", "dopamine_agonist", "nmda_antagonist",
